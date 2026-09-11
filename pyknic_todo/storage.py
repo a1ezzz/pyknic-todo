@@ -151,7 +151,7 @@ class Storage:
     def _read_json(self, path: Path) -> dict[str, Any]:
         with self.lock(exclusive=False):
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                return json.load(f)  # type: ignore[no-any-return]
 
     def _write_json(self, path: Path, data: dict[str, Any]) -> None:
         with self.lock(exclusive=True):
@@ -164,12 +164,12 @@ class Storage:
     def get_client_id(self) -> str:
         with self.lock(exclusive=False):
             data = self._read_json(self.tasks_file)
-            return data.get("client_id", f"{self.settings.client_id_prefix}-default")
+            return data.get("client_id", f"{self.settings.client_id_prefix}-default")  # type: ignore[no-any-return]
 
     def load_tasks(self) -> list[dict[str, Any]]:
         with self.lock(exclusive=False):
             data = self._read_json(self.tasks_file)
-            return data.get("items", [])
+            return data.get("items", [])  # type: ignore[no-any-return]
 
     def save_tasks(self, tasks: list[dict[str, Any]]) -> None:
         with self.lock(exclusive=True):
@@ -181,7 +181,7 @@ class Storage:
     def load_recurrence_rules(self) -> list[dict[str, Any]]:
         with self.lock(exclusive=False):
             data = self._read_json(self.recurrence_file)
-            return data.get("items", [])
+            return data.get("items", [])  # type: ignore[no-any-return]
 
     def save_recurrence_rules(self, rules: list[dict[str, Any]]) -> None:
         with self.lock(exclusive=True):
@@ -192,7 +192,7 @@ class Storage:
     def load_history(self) -> list[dict[str, Any]]:
         with self.lock(exclusive=False):
             data = self._read_json(self.history_file)
-            return data.get("events", [])
+            return data.get("events", [])  # type: ignore[no-any-return]
 
     def record_history_event(
         self,
@@ -342,7 +342,9 @@ class Storage:
             if schedule_type not in VALID_SCHEDULE_TYPES:
                 raise ValueError(f"Invalid schedule_type '{schedule_type}'. Valid: {sorted(VALID_SCHEDULE_TYPES)}")
             if end_condition_type not in VALID_END_CONDITIONS:
-                raise ValueError(f"Invalid end_condition_type '{end_condition_type}'. Valid: {sorted(VALID_END_CONDITIONS)}")
+                raise ValueError(
+                    f"Invalid end_condition_type '{end_condition_type}'. Valid: {sorted(VALID_END_CONDITIONS)}"
+                )
 
             tasks = self.load_tasks()
             matched = [i for i, t in enumerate(tasks) if t.get("id") == task_id_query]

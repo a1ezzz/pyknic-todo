@@ -8,3 +8,5 @@
 - Check if the requirements.txt may be deleted
 - Test with mypy
 - Setup github branch rules
+- Replace links from .venv to venv
+
