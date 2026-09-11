@@ -1,0 +1,379 @@
+
+# input vars:
+#   repo_uri -- a git repository URI (default: https://github.com/a1ezzz/pyknic-todo)
+#   branch -- a name of a git branch this pipeline is running on
+#   github-access-token -- a token for PR status updates
+#   pull_request_id -- a number of PR
+#   commit -- a commit a PR is related to
+#   pull_request_branch_name -- if defined then it is a name of a source branch, that PR is related to
+#   extra_branch -- the same as pull_request_branch_name (or the branch)
+#   python_version -- a version of CPython that is used within the code
+#   tg_bot_token -- access token to Telegram bot
+#   tg_chat -- target chat id to notify
+
+# TODO: get rid off build-metadata-resource
+
+resource_types:
+
+  - name: build-metadata
+    type: docker-image
+    source:
+      repository: mastertinner/build-metadata-resource
+
+resources:
+
+  - name: code
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: ((branch))
+
+  - name: extra-branch
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: ((extra_branch))
+
+  - name: pr-code
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: ((pull_request_branch_name))
+
+  - name: metadata
+    type: build-metadata
+
+jobs:
+  - name: pyknic-test-job-py-((python_version))
+    build_log_retention:
+      builds: 3
+    plan:
+
+      - get: code
+        trigger: true
+
+      - get: extra-branch
+        trigger: true
+
+      - get: pr-code
+
+      - get: metadata
+
+      - load_var: metadata_build_id
+        file: metadata/build-id
+        format: trim
+
+      - task: optional_code_merging
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: code
+            - name: metadata
+          outputs:
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                if [[ -n "((pull_request_id))" ]]; then
+
+                    git config user.email "john-doe@concourse-ci"
+                    git config user.name "John Doe-Concourse"
+
+                    git fetch origin '((pull_request_branch_name)):((pull_request_branch_name))'
+                    git merge '((pull_request_branch_name))' --no-commit
+                fi
+
+      - task: prepare_venv
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          outputs:
+            - name: sandbox
+              path: /sandbox
+          run:
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                pip3 --cache-dir /pip-cache install virtualenv
+                virtualenv -p /usr/local/bin/python /sandbox/venv
+
+      - task: install_dependencies
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: sandbox
+              path: /sandbox
+            - name: code
+          outputs:
+            - name: sandbox
+              path: /sandbox
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+                pip cache info --cache-dir /pip-cache
+                echo
+
+                source /sandbox/venv/bin/activate
+                /sandbox/venv/bin/pip3 --cache-dir /pip-cache install '.[all]'
+
+                echo
+                pip cache info --cache-dir /pip-cache
+
+      - task: run_tests
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: sandbox
+              path: /sandbox
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+                source /sandbox/venv/bin/activate
+
+                pytest -v
+        on_failure:
+          task: set_pytest_status_as_failed
+          config:
+            platform: linux
+            image_resource:
+              type: registry-image
+              source:
+                repository: a1ezzz/pyknic-concourse-base-image
+                tag: py-alpine-((python_version))
+            inputs:
+              - name: code
+            run:
+              dir: code
+              path: /bin/bash
+              args:
+                - -ecx
+                - |
+
+                  TEST_NAME="py-((python_version))-pytest" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh failure
+
+      - task: set_pytest_status_as_succeeded
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                  TEST_NAME="py-((python_version))-pytest" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh success
+
+      - task: run_flake8
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: sandbox
+              path: /sandbox
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+                source /sandbox/venv/bin/activate
+                flake8
+        on_failure:
+          task: set_flake8_status_as_failed
+          config:
+            platform: linux
+            image_resource:
+              type: registry-image
+              source:
+                repository: a1ezzz/pyknic-concourse-base-image
+                tag: py-alpine-((python_version))
+            inputs:
+              - name: code
+            run:
+              dir: code
+              path: /bin/bash
+              args:
+                - -ecx
+                - |
+
+                  TEST_NAME="py-((python_version))-flake8" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh failure
+
+      - task: set_flake8_status_as_succeeded
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                  TEST_NAME="py-((python_version))-flake8" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh success
+
+      - task: run_mypy
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: sandbox
+              path: /sandbox
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+                source /sandbox/venv/bin/activate
+                mypy --install-types --non-interactive
+                mypy
+        on_failure:
+          task: set_mypy_status_as_failed
+          config:
+            platform: linux
+            image_resource:
+              type: registry-image
+              source:
+                repository: a1ezzz/pyknic-concourse-base-image
+                tag: py-alpine-((python_version))
+            inputs:
+              - name: code
+            run:
+              dir: code
+              path: /bin/bash
+              args:
+                - -ecx
+                - |
+
+                  TEST_NAME="py-((python_version))-mypy" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh failure
+
+      - task: set_mypy_status_as_succeeded
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-((python_version))
+          inputs:
+            - name: code
+          run:
+            dir: code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                  TEST_NAME="py-((python_version))-mypy" \
+                  BUILD_URL="https://concourse-ci.binblob.com/builds/((.:metadata_build_id))" \
+                  BUILD_BRANCH="((branch))" \
+                  BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
+                  TG_BOT_TOKEN="((tg_bot_token))" \
+                  TG_CHAT_ID="((tg_chat))" \
+                  TG_API_HOST="((tg_api_host))" \
+                  GITHUB_PULL_REQUEST_ID="((pull_request_id))" \
+                  GITHUB_ACCESS_TOKEN="((github-access-token))" \
+                  /scripts/test-feedback.sh success

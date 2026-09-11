@@ -1,0 +1,80 @@
+
+resources:
+
+  - name: ci-code
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: "main"
+
+  - name: timer-trigger
+    type: time
+    source:
+      interval: 3m
+
+jobs:
+  - name: set-pipelines
+    serial: true
+    build_log_retention:
+      builds: 10
+    plan:
+      - get: timer-trigger
+        trigger: true
+
+      - get: ci-code
+
+      - task: fetch-branches
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-3.14
+          inputs:
+            - name: ci-code
+          outputs:
+            - name: branches
+          run:
+            dir: ci-code
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                git ls-remote --heads origin | \
+                  grep -o -E 'refs/heads/(.*)' | \
+                  sed 's@^refs/heads/@@1' | \
+                  jq -R | \
+                  jq -s > ../branches/all_remote.json
+
+      - load_var: branches
+        file: branches/all_remote.json
+        format: json
+
+      - across:
+          - var: python_version
+            values: ((supported_python_version))
+        do:
+          - try:
+              across:
+              - var: branch
+                values: ((.:branches))
+
+              set_pipeline: pyknic-test-((.:python_version))
+              file: ci-code/concourse-ci/pyknic-test.yml
+              instance_vars:
+                branch: ((.:branch))
+              vars:
+                branch: ((.:branch))
+                commit: ""
+                github-access-token: ""
+                pull_request_id: ""
+                pull_request_branch_name: ""
+                extra_branch: ((.:branch))
+                python_version: ((.:python_version))
+                tg_bot_token: ((tg_bot_token))
+                tg_chat: ((tg_chat))
+                tg_api_host: "((tg_api_host))"
+                repo_uri: ((repo_uri))

@@ -1,0 +1,136 @@
+
+resources:
+
+  - name: ci-code
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: main
+
+  - name: timer-trigger
+    type: time
+    source:
+      interval: 3m
+
+jobs:
+  - name: pyknic-pr
+    serial: true
+    build_log_retention:
+      builds: 10
+    plan:
+
+      - get: timer-trigger
+        trigger: true
+
+      - get: ci-code
+
+      - task: fetch-pull-requests
+        config:
+          platform: linux
+          image_resource:
+            type: registry-image
+            source:
+              repository: a1ezzz/pyknic-concourse-base-image
+              tag: py-alpine-3.14
+          outputs:
+            - name: pull-requests
+              path: /pull-requests
+          run:
+            path: /bin/bash
+            args:
+              - -ecx
+              - |
+
+                curl -L \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ((github-access-token))" \
+                  -H "X-GitHub-Api-Version: 2026-03-10" \
+                  https://api.github.com/repos/a1ezzz/pyknic-todo/pulls | \
+                jq '.[] |
+                  select(.state == "open") |
+                  .number
+                ' | \
+                jq -sc | \
+                tee /pull-requests/open_pull_requests.json
+
+      - load_var: pull_requests
+        file: pull-requests/open_pull_requests.json
+        format: json
+
+      - across:
+        - var: pull_request_id
+          values: ((.:pull_requests))
+
+        do:
+
+          - task: fetch-pull-request-details
+            config:
+              platform: linux
+              image_resource:
+                type: registry-image
+                source:
+                  repository: a1ezzz/pyknic-concourse-base-image
+                  tag: py-alpine-3.14
+              outputs:
+                - name: pull-request-details
+                  path: /pull-request-details
+              run:
+                path: /bin/bash
+                args:
+                  - -ecx
+                  - |
+
+                      curl -L \
+                        -H "Accept: application/vnd.github+json" \
+                        -H "Authorization: Bearer ((github-access-token))" \
+                        -H "X-GitHub-Api-Version: 2026-03-10" \
+                          "https://api.github.com/repos/a1ezzz/pyknic-todo/pulls/((.:pull_request_id))" | \
+                      tee /pull-request-details/details.json
+
+                      cat /pull-request-details/details.json
+
+                      cat /pull-request-details/details.json | \
+                      jq -r '.base.ref' | \
+                      tee /pull-request-details/to_ref.txt
+
+                      cat /pull-request-details/details.json | \
+                      jq -r '.head.ref' | \
+                      tee /pull-request-details/from_ref.txt
+
+                      cat /pull-request-details/details.json | \
+                      jq -r '.head.sha' | \
+                      tee /pull-request-details/from_sha.txt
+
+          - load_var: pull_request_base_name
+            file: pull-request-details/to_ref.txt
+            format: trim
+
+          - load_var: pull_request_head_name
+            file: pull-request-details/from_ref.txt
+            format: trim
+
+          - load_var: pull_request_head_sha
+            file: pull-request-details/from_sha.txt
+            format: trim
+
+          - across:
+              - var: python_version
+                values: ((supported_python_version))
+
+            set_pipeline: pyknic-pull-request-test-((.:python_version))
+            file: ci-code/concourse-ci/pyknic-test.yml
+            instance_vars:
+              pull_request_id: ((.:pull_request_id))
+            vars:
+              branch: ((.:pull_request_base_name))
+              commit: ((.:pull_request_head_sha))
+              github-access-token: ((github-access-token))
+              pull_request_id: ((.:pull_request_id))
+              pull_request_branch_name: ((.:pull_request_head_name))
+              extra_branch: ((.:pull_request_head_name))
+              python_version: ((.:python_version))
+              tg_bot_token: ((tg_bot_token))
+              tg_chat: ((tg_chat))
+              tg_api_host: "((tg_api_host))"
+              repo_uri: ((repo_uri))

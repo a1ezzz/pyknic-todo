@@ -1,7 +1,7 @@
 
 - Switch storage format from JSON to MessagePack
 - Implement a purge mechanism for local JSON/MessagePack files
-- Run tests across different Python versions and update `AGENTS.md` and `README.md` regarding supported Python versions
+- Run tests across different Python versions and update `AGENTS.md`, `README.md` and `concourse-ci/defaults.yml` regarding supported Python versions
 - Set up CI/CD
 - Test and verify basic operations. Update `README.md` if necessary.
 - Test and verify recurrence operations. Update `README.md` if necessary.
