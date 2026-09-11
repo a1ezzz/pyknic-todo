@@ -1,0 +1,10 @@
+# Core runtime dependencies
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Build & installation dependencies
+setuptools>=61.0.0
+-e .
+
+# Development & testing
+pytest>=7.0.0
