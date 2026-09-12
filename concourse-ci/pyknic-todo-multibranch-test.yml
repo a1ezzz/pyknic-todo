@@ -87,3 +87,4 @@ jobs:
                 tg_api_host: "((tg_api_host))"
                 repo_uri: ((repo_uri))
                 repo_name: ((repo_name))
+                pytest_extra_secrets: ""
