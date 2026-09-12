@@ -30,7 +30,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_create_task_and_history(self) -> None:
     
-        assert(0)
+        asdasdasdadsasdasmbmbmbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_=1
     
         storage = Storage(self.data_dir)
         task = storage.create_task(
