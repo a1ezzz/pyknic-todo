@@ -85,7 +85,7 @@ fi
 
 update_version() {
     local ver="$1"
-    sed -i -E "s/__version__\s*=\s*['\"][^'\"]+['\"]/__version__ = \"${ver}\"/" "$INIT_FILE"
+    sed -i -E "s/__version__[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/__version__ = \"${ver}\"/" "$INIT_FILE"
     if ! grep -q "__version__ = \"${ver}\"" "$INIT_FILE"; then
         echo "Error: Failed to update version in ${INIT_FILE} to '${ver}'." >&2
         exit 1
@@ -94,14 +94,46 @@ update_version() {
 
 PUSH_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_PATH}.git"
 
+# Determine current test/dev version
+CURRENT_TEST_VERSION=$(sed -n -E "s/__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" "${INIT_FILE}" || true)
+if [ -z "$CURRENT_TEST_VERSION" ]; then
+    CURRENT_TEST_VERSION=$(git show main:"${INIT_FILE}" 2>/dev/null | sed -n -E "s/__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" || echo "unknown")
+fi
+
+# Determine current release
+CURRENT_RELEASE=""
+LATEST_REMOTE_RELEASE_BRANCH=$(git ls-remote --heads origin "refs/heads/release/*" 2>/dev/null | awk -F'refs/heads/release/' '{print $2}' | sort -V | tail -n 1 || true)
+if [ -n "$LATEST_REMOTE_RELEASE_BRANCH" ]; then
+    CURRENT_RELEASE="${LATEST_REMOTE_RELEASE_BRANCH} (branch: release/${LATEST_REMOTE_RELEASE_BRANCH})"
+fi
+
+if [ -z "$CURRENT_RELEASE" ]; then
+    LATEST_GH_RELEASE=$(curl -s \
+        -H "Accept: application/vnd.github+json" \
+        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "https://api.github.com/repos/${REPO_PATH}/releases/latest" 2>/dev/null | \
+        (command -v jq &>/dev/null && jq -r '.tag_name // empty' || python3 -c 'import json, sys; d = json.load(sys.stdin); print(d.get("tag_name", ""))' 2>/dev/null) || true)
+    if [ -n "$LATEST_GH_RELEASE" ] && [ "$LATEST_GH_RELEASE" != "null" ]; then
+        CURRENT_RELEASE="${LATEST_GH_RELEASE}"
+    fi
+fi
+
+if [ -z "$CURRENT_RELEASE" ]; then
+    CURRENT_RELEASE="none (initial release)"
+fi
+
 # Display summary and ask for user confirmation before executing any modifying actions
 cat <<EOF
 
 ==================================================
 Release automation plan:
-  GitHub repository: ${REPO_PATH}
-  Release version:   ${RELEASE_VERSION}
-  Test/dev version:  ${TEST_VERSION}
+  GitHub repository:      ${REPO_PATH}
+  Current release:        ${CURRENT_RELEASE}
+  Current test version:   ${CURRENT_TEST_VERSION}
+
+  New release version:    ${RELEASE_VERSION}
+  New test version:       ${TEST_VERSION}
 
 Actions to be performed:
   1. Checkout 'main' and create branch '${RELEASE_BRANCH}'
