@@ -8,6 +8,13 @@ resources:
       uri: ((ci_repo_uri))
       branch: ((ci_repo_branch))
 
+  - name: code
+    type: git
+    icon: github
+    source:
+      uri: ((repo_uri))
+      branch: 'main'
+
   - name: timer-trigger
     type: time
     source:
@@ -24,6 +31,8 @@ jobs:
 
       - get: ci-code
 
+      - get: code
+
       - task: fetch-branches
         config:
           platform: linux
@@ -33,11 +42,11 @@ jobs:
               repository: a1ezzz/pyknic-concourse-base-image
               tag: py-alpine-3.14
           inputs:
-            - name: ci-code
+            - name: code
           outputs:
             - name: branches
           run:
-            dir: ci-code
+            dir: code
             path: /bin/bash
             args:
               - -ecx
