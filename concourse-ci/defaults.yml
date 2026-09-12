@@ -1,5 +1,9 @@
 
+repo_name: "a1ezzz/pyknic-todo"
 repo_uri: "https://github.com/a1ezzz/pyknic-todo"
+
+ci_repo_uri: "https://github.com/a1ezzz/pyknic-builder"
+ci_repo_branch: "main"
 
 tg_api_host: "api.telegram.org"
 
