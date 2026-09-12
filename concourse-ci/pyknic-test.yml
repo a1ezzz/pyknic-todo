@@ -116,6 +116,7 @@ jobs:
                 repository: a1ezzz/pyknic-concourse-base-image-test
                 tag: py-alpine-((python_version))
             inputs:
+              - name: code
               - name: sandbox
                 path: /sandbox
             params:
@@ -129,6 +130,7 @@ jobs:
               GITHUB_PULL_REQUEST_ID: ((pull_request_id))
               GITHUB_ACCESS_TOKEN: ((github-access-token))
             run:
+              dir: code
               path: /bin/bash
               args:
                 - -eucx
