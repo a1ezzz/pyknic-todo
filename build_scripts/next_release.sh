@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # Validate command-line arguments
-if [ "$#" -ne 3 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+if [ "$#" -ne 2 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Usage: $0 <release_version> <test_version> [<github_token>]" >&2
     echo "Example: $0 0.1.0 0.2.0-dev ghp_xxxx" >&2
     exit 1
