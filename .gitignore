@@ -4,3 +4,5 @@ data
 pyknic_todo.egg-info/
 build
 **/__pycache__/
+.coverage
+docs/pytest/
