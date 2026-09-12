@@ -77,16 +77,45 @@ if git rev-parse --verify "refs/heads/${FEATURE_BRANCH}" >/dev/null 2>&1; then
     exit 1
 fi
 
-INIT_FILE="pyknic_todo/__init__.py"
-if [ ! -f "$INIT_FILE" ]; then
-    echo "Error: Version file '${INIT_FILE}' not found." >&2
+# Find version file and attribute from setup.cfg
+SETUP_CFG="setup.cfg"
+if [ ! -f "$SETUP_CFG" ]; then
+    echo "Error: Configuration file '${SETUP_CFG}' not found." >&2
+    exit 1
+fi
+
+ATTR_SPEC=$(sed -n -E "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*attr:[[:space:]]*['\"]?([^'\"[:space:]]+)['\"]?/\1/p" "${SETUP_CFG}")
+if [ -z "$ATTR_SPEC" ]; then
+    echo "Error: Could not find 'version = attr: ...' setting in ${SETUP_CFG}." >&2
+    exit 1
+fi
+
+MODULE_PATH="${ATTR_SPEC%.*}"
+VERSION_ATTR="${ATTR_SPEC##*.}"
+MODULE_DIR="${MODULE_PATH//.//}"
+
+INIT_FILE=""
+for candidate in \
+    "${MODULE_DIR}/__init__.py" \
+    "${MODULE_DIR}.py" \
+    "src/${MODULE_DIR}/__init__.py" \
+    "src/${MODULE_DIR}.py"
+do
+    if [ -f "$candidate" ]; then
+        INIT_FILE="$candidate"
+        break
+    fi
+done
+
+if [ -z "$INIT_FILE" ]; then
+    echo "Error: Could not locate version file for module '${MODULE_PATH}' specified in ${SETUP_CFG}." >&2
     exit 1
 fi
 
 update_version() {
     local ver="$1"
-    sed -i -E "s/__version__[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/__version__ = \"${ver}\"/" "$INIT_FILE"
-    if ! grep -q "__version__ = \"${ver}\"" "$INIT_FILE"; then
+    sed -i -E "s/${VERSION_ATTR}[[:space:]]*=[[:space:]]*['\"][^'\"]+['\"]/${VERSION_ATTR} = \"${ver}\"/" "$INIT_FILE"
+    if ! grep -q "${VERSION_ATTR} = \"${ver}\"" "$INIT_FILE"; then
         echo "Error: Failed to update version in ${INIT_FILE} to '${ver}'." >&2
         exit 1
     fi
@@ -95,9 +124,9 @@ update_version() {
 PUSH_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_PATH}.git"
 
 # Determine current test/dev version
-CURRENT_TEST_VERSION=$(sed -n -E "s/__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" "${INIT_FILE}" || true)
+CURRENT_TEST_VERSION=$(sed -n -E "s/${VERSION_ATTR}[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" "${INIT_FILE}" || true)
 if [ -z "$CURRENT_TEST_VERSION" ]; then
-    CURRENT_TEST_VERSION=$(git show main:"${INIT_FILE}" 2>/dev/null | sed -n -E "s/__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" || echo "unknown")
+    CURRENT_TEST_VERSION=$(git show main:"${INIT_FILE}" 2>/dev/null | sed -n -E "s/${VERSION_ATTR}[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" || echo "unknown")
 fi
 
 # Determine current release
