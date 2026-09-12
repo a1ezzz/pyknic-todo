@@ -29,6 +29,9 @@ class TestPyknicTodo(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_create_task_and_history(self) -> None:
+    
+        assert(0)
+    
         storage = Storage(self.data_dir)
         task = storage.create_task(
             title="Buy groceries",
