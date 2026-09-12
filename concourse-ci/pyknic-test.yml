@@ -66,6 +66,10 @@ jobs:
         file: metadata/build-id
         format: trim
 
+      - load_var: metadata_pipeline_name
+        file: metadata/build-pipeline-name
+        format: trim
+
       - task: run_tests
         config:
           platform: linux
@@ -76,7 +80,6 @@ jobs:
               tag: py-alpine-((python_version))
           inputs:
             - name: code
-            - name: metadata
           outputs:
             - name: code
             - name: sandbox
@@ -86,6 +89,7 @@ jobs:
             PYTHON_VERSION: ((python_version))
             BUILD_URL: "https://concourse-ci.binblob.com/builds/((.:metadata_build_id))"
             BUILD_BRANCH: ((branch))
+            BUILD_PIPELINE_NAME: ((.:metadata_pipeline_name))
             TG_BOT_TOKEN: ((tg_bot_token))
             TG_CHAT_ID: ((tg_chat))
             TG_API_HOST: ((tg_api_host))
@@ -95,7 +99,7 @@ jobs:
             dir: code
             path: /bin/bash
             args:
-              - -ecx
+              - -eucx
               - |
 
                 CODE_DIR="$(pwd)" \
@@ -118,6 +122,7 @@ jobs:
               SANDBOX_DIR: "/sandbox"
               PYTHON_VERSION: ((python_version))
               BUILD_URL: "https://concourse-ci.binblob.com/builds/((.:metadata_build_id))"
+              BUILD_PIPELINE_NAME: ((.:metadata_pipeline_name))
               TG_BOT_TOKEN: ((tg_bot_token))
               TG_CHAT_ID: ((tg_chat))
               TG_API_HOST: ((tg_api_host))
@@ -126,14 +131,15 @@ jobs:
             run:
               path: /bin/bash
               args:
-                - -ecx
+                - -eucx
                 - |
 
                   if [[ ! -f /sandbox/error.feedback ]]; then
                     echo "Unknown error spotted!"
 
+                    CODE_DIR="$(pwd)" \
                     BUILD_COMMIT="$(git rev-parse $( [[ -n "((pull_request_id))" ]] && echo "((pull_request_branch_name))" || echo "HEAD" ))" \
-                    /scripts/reset-feedback.sh
+                    /scripts/reset-feedbacks.sh
 
                     if [[ -n "${TG_BOT_TOKEN:-}" && -n "${TG_CHAT_ID:-}" ]]; then
 
@@ -141,7 +147,7 @@ jobs:
                         -X POST \
                         "https://${TG_API_HOST}/bot${TG_BOT_TOKEN}/sendMessage" \
                         -d chat_id="${TG_CHAT_ID}" \
-                        -d text="Unkown error spotted!"
+                        -d text="Unkown error spotted for pipeline ${BUILD_PIPELINE_NAME}"
 
                     fi
 
