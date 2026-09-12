@@ -77,7 +77,6 @@ jobs:
                 branch: ((.:branch))
               vars:
                 branch: ((.:branch))
-                commit: ""
                 github-access-token: ""
                 pull_request_id: ""
                 pull_request_branch_name: ""
