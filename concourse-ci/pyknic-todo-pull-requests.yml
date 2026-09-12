@@ -5,8 +5,8 @@ resources:
     type: git
     icon: github
     source:
-      uri: ((repo_uri))
-      branch: main
+      uri: ((ci_repo_uri))
+      branch: ((ci_repo_branch))
 
   - name: timer-trigger
     type: time
@@ -118,7 +118,7 @@ jobs:
               - var: python_version
                 values: ((supported_python_version))
 
-            set_pipeline: pyknic-pull-request-test-((.:python_version))
+            set_pipeline: pyknic-todo-pull-request-test-((.:python_version))
             file: ci-code/concourse-ci/pyknic-test.yml
             instance_vars:
               pull_request_id: ((.:pull_request_id))
