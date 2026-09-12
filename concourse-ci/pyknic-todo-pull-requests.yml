@@ -110,10 +110,6 @@ jobs:
             file: pull-request-details/from_ref.txt
             format: trim
 
-          - load_var: pull_request_head_sha
-            file: pull-request-details/from_sha.txt
-            format: trim
-
           - across:
               - var: python_version
                 values: ((supported_python_version))
@@ -124,7 +120,6 @@ jobs:
               pull_request_id: ((.:pull_request_id))
             vars:
               branch: ((.:pull_request_base_name))
-              commit: ((.:pull_request_head_sha))
               github-access-token: ((github-access-token))
               pull_request_id: ((.:pull_request_id))
               pull_request_branch_name: ((.:pull_request_head_name))
