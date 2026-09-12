@@ -3,5 +3,5 @@
 from .settings import Settings
 from .storage import Storage
 
-__version__ = "0.0.3-dev"
+__version__ = "0.0.4-dev"
 __all__ = ["Settings", "Storage", "__version__"]
