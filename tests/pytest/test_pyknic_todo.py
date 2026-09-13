@@ -14,9 +14,18 @@ from pyknic_todo.cli import main
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
 from pyknic_todo.settings import Settings
 from pyknic_todo.storage import (
+    AbstractHistoryStorage,
+    AbstractRecurrenceRuleStorage,
+    AbstractStorage,
+    AbstractTaskStorage,
     HistoryStorage,
+    JsonHistoryStorage,
+    JsonRecurrenceRuleStorage,
+    JsonStorage,
+    JsonTaskStorage,
     RecurrenceRuleStorage,
     Storage,
+    StorageFactory,
     TaskStorage,
 )
 
@@ -566,6 +575,56 @@ class TestPyknicTodo(unittest.TestCase):
         # Document model
         doc_model = hs.load_document_model()
         self.assertEqual(len(doc_model.events), 1)
+
+    def test_abstract_interfaces_and_json_subclasses(self) -> None:
+        self.assertTrue(issubclass(JsonTaskStorage, AbstractTaskStorage))
+        self.assertTrue(issubclass(JsonRecurrenceRuleStorage, AbstractRecurrenceRuleStorage))
+        self.assertTrue(issubclass(JsonHistoryStorage, AbstractHistoryStorage))
+        self.assertTrue(issubclass(JsonStorage, AbstractStorage))
+
+        storage = Storage(self.data_dir)
+        self.assertIsInstance(storage, AbstractStorage)
+        self.assertIsInstance(storage.tasks, AbstractTaskStorage)
+        self.assertIsInstance(storage.recurrence_rules, AbstractRecurrenceRuleStorage)
+        self.assertIsInstance(storage.history, AbstractHistoryStorage)
+
+    def test_storage_factory(self) -> None:
+        self.assertIn("json", StorageFactory.get_registered_types())
+
+        # Create components via factory
+        st = StorageFactory.create_storage("json", data_dir=self.data_dir)
+        self.assertIsInstance(st, AbstractStorage)
+        self.assertIsInstance(st, JsonStorage)
+
+        ts = StorageFactory.create_task_storage("json", data_dir=self.data_dir)
+        self.assertIsInstance(ts, AbstractTaskStorage)
+        self.assertIsInstance(ts, JsonTaskStorage)
+
+        rs = StorageFactory.create_recurrence_storage("json", data_dir=self.data_dir)
+        self.assertIsInstance(rs, AbstractRecurrenceRuleStorage)
+        self.assertIsInstance(rs, JsonRecurrenceRuleStorage)
+
+        hs = StorageFactory.create_history_storage("json", data_dir=self.data_dir)
+        self.assertIsInstance(hs, AbstractHistoryStorage)
+        self.assertIsInstance(hs, JsonHistoryStorage)
+
+        # Factory error for unsupported backend
+        with self.assertRaises(ValueError):
+            StorageFactory.create_storage("nonexistent_backend")
+        with self.assertRaises(ValueError):
+            StorageFactory.create_task_storage("nonexistent_backend")
+        with self.assertRaises(ValueError):
+            StorageFactory.create_recurrence_storage("nonexistent_backend")
+        with self.assertRaises(ValueError):
+            StorageFactory.create_history_storage("nonexistent_backend")
+
+    def test_cli_storage_type_argument(self) -> None:
+        data_arg = f"--data-dir={self.data_dir}"
+        f_out = io.StringIO()
+        with patch("sys.stdout", f_out):
+            code = main([data_arg, "--storage-type=json", "add", "CLI storage type task"])
+        self.assertEqual(code, 0)
+        self.assertIn("Task created:", f_out.getvalue())
 
 
 if __name__ == "__main__":

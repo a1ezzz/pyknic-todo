@@ -10,7 +10,8 @@ from typing import Any, Optional, Sequence
 
 from .settings import Settings
 from .storage import (
-    Storage,
+    AbstractStorage,
+    StorageFactory,
     VALID_END_CONDITIONS,
     VALID_PRIORITIES,
     VALID_SCHEDULE_TYPES,
@@ -31,6 +32,12 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
         dest="data_dir",
         default=None,
         help=f"Directory to store JSON data (defaults to {settings.data_dir} or $PYKNIC_TODO_DATA_DIR)",
+    )
+    parser.add_argument(
+        "--storage-type",
+        dest="storage_type",
+        default=None,
+        help=f"Storage backend type (defaults to {settings.storage_type} or $PYKNIC_TODO_STORAGE_TYPE)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -165,7 +172,7 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     return parser
 
 
-def handle_add(storage: Storage, args: argparse.Namespace) -> int:
+def handle_add(storage: AbstractStorage, args: argparse.Namespace) -> int:
     tags: list[str] = []
     if args.tags:
         for t in args.tags:
@@ -187,7 +194,7 @@ def handle_add(storage: Storage, args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_status(storage: Storage, args: argparse.Namespace) -> int:
+def handle_status(storage: AbstractStorage, args: argparse.Namespace) -> int:
     task = storage.set_task_status(
         task_id_query=args.task_id,
         new_status=args.new_status,
@@ -197,7 +204,7 @@ def handle_status(storage: Storage, args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_done(storage: Storage, args: argparse.Namespace) -> int:
+def handle_done(storage: AbstractStorage, args: argparse.Namespace) -> int:
     task = storage.set_task_status(
         task_id_query=args.task_id,
         new_status="done",
@@ -207,7 +214,7 @@ def handle_done(storage: Storage, args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_repeat(storage: Storage, args: argparse.Namespace) -> int:
+def handle_repeat(storage: AbstractStorage, args: argparse.Namespace) -> int:
     task, rule = storage.set_task_recurrence(
         task_id_query=args.task_id,
         schedule_type=args.schedule_type,
@@ -231,7 +238,7 @@ def is_deleted_task(task: dict[str, Any]) -> bool:
     return task.get("status") == "deleted" or bool(task.get("deleted_at"))
 
 
-def handle_list(storage: Storage, args: argparse.Namespace) -> int:
+def handle_list(storage: AbstractStorage, args: argparse.Namespace) -> int:
     tasks = storage.load_tasks()
 
     show_all = getattr(args, "all", False) or getattr(args, "mode", None) == "all"
@@ -281,6 +288,7 @@ def handle_config(settings: Settings, args: argparse.Namespace) -> int:
         return 0
 
     print(f"data_dir: {settings.data_dir}")
+    print(f"storage_type: {settings.storage_type}")
     print(f"schema_version: {settings.schema_version}")
     print(f"client_id_prefix: {settings.client_id_prefix}")
     print(f"default_priority: {settings.default_priority}")
@@ -300,8 +308,10 @@ def main(
 
     if args.data_dir:
         settings = settings.model_copy(update={"data_dir": Path(args.data_dir)})
+    if getattr(args, "storage_type", None):
+        settings = settings.model_copy(update={"storage_type": args.storage_type})
 
-    storage = Storage(settings=settings)
+    storage = StorageFactory.create_storage(settings=settings)
 
     try:
         if args.command == "add":

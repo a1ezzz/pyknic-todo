@@ -40,3 +40,10 @@ class Settings(BaseSettings):
         default="pending",
         description="Default status for new tasks",
     )
+    storage_type: str = Field(
+        default="json",
+        validation_alias=AliasChoices(
+            "PYKNIC_TODO_STORAGE_TYPE", "TODO_STORAGE_TYPE", "storage_type"
+        ),
+        description="Storage backend type ('json', etc.)",
+    )
