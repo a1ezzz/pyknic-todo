@@ -84,17 +84,9 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         """Get the client ID associated with the storage."""
         raise NotImplementedError('This method is abstract')
 
-    # Representation methods
-    @staticmethod
-    def to_model(data: dict[str, typing.Any]) -> Task:
-        return Task(**data)
-
     @staticmethod
     def from_model(model: Task) -> dict[str, typing.Any]:
         return model.model_dump()
-
-    def load_task_models(self) -> list[Task]:
-        return [self.to_model(t) for t in self.load_tasks()]
 
 
 class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):

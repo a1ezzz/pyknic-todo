@@ -446,12 +446,6 @@ class TestPyknicTodo(unittest.TestCase):
         tasks = ts.load_tasks()
         self.assertEqual(len(tasks), 1)
 
-        # Model representation
-        models = ts.load_task_models()
-        self.assertEqual(len(models), 1)
-        self.assertIsInstance(models[0], Task)
-        self.assertEqual(models[0].title, "Isolated task")
-
         # Document model
         doc_model = ts.load_document_model()
         self.assertEqual(len(doc_model.items), 1)
