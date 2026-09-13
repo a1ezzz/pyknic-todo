@@ -170,17 +170,12 @@ class AbstractHistoryStorage(metaclass=ABCMeta):
         )
 
     @abstractmethod
-    def find_events_for_task(self, task_id: str) -> list[dict[str, Any]]:
+    def find_events_for_task(self, task_id: str) -> list[dict[str, typing.Any]]:
         """Find history events for a given task ID."""
         raise NotImplementedError('This method is abstract')
 
-    # Representation methods
-    @staticmethod
-    def to_model(data: dict[str, typing.Any]) -> StateHistoryEvent:
-        return StateHistoryEvent(**data)
-
     def load_event_models(self) -> list[StateHistoryEvent]:
-        return [self.to_model(e) for e in self.load_history()]
+        return [StateHistoryEvent(**e) for e in self.load_history()]
 
 
 class AbstractStorage(metaclass=ABCMeta):
@@ -316,7 +311,3 @@ class AbstractStorage(metaclass=ABCMeta):
                 recurrence_rule_id=rule["id"],
             )
             return task, rule
-
-
-AbstractRecurrenceStorage = AbstractRecurrenceRuleStorage
-AbstractStateHistoryStorage = AbstractHistoryStorage

@@ -7,8 +7,6 @@ from .settings import Settings
 from .storage.proto import (
     AbstractHistoryStorage,
     AbstractRecurrenceRuleStorage,
-    AbstractRecurrenceStorage,
-    AbstractStateHistoryStorage,
     AbstractStorage,
     AbstractTaskStorage,
 )
