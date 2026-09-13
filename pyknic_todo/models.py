@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
@@ -20,6 +22,10 @@ TaskStatus = Literal[
 TaskPriority = Literal["low", "medium", "high", "urgent"]
 ScheduleType = Literal["rrule", "cron"]
 EndConditionType = Literal["never", "until_date", "count"]
+
+
+def get_utc_now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class EndCondition(BaseModel):

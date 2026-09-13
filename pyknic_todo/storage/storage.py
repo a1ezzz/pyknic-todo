@@ -44,6 +44,7 @@ from pyknic_todo.models import (
     StateHistoryEvent,
     Task,
     TaskDocument,
+    get_utc_now_iso
 )
 from pyknic_todo.settings import Settings
 
@@ -75,9 +76,6 @@ VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
 VALID_SCHEDULE_TYPES = {"rrule", "cron"}
 VALID_END_CONDITIONS = {"never", "until_date", "count"}
 
-
-def get_utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # =====================================================================
@@ -388,24 +386,6 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             elif task.get("deleted_at"):
                 task["deleted_at"] = None
 
-            tasks[target_idx] = Task(**task)  # TODO: uglier!
-            self.save_tasks(tasks)
-            return task
-
-    def set_recurrence_rule_id(
-        self,
-        task_id_query: str,
-        recurrence_rule_id: str,
-    ) -> dict[str, Any]:
-        with self.lock(exclusive=True):
-            tasks = self.load_tasks()
-            target_idx = find_task_index(tasks, task_id_query)
-            task = tasks[target_idx].model_dump()  # TODO: ugly!
-            now = get_utc_now_iso()
-
-            task["recurrence_rule_id"] = recurrence_rule_id
-            task["version"] = int(task.get("version", 1)) + 1
-            task["updated_at"] = now
             tasks[target_idx] = Task(**task)  # TODO: uglier!
             self.save_tasks(tasks)
             return task

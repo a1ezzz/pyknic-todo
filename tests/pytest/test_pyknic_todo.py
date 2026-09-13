@@ -455,10 +455,6 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(updated["status"], "done")
         self.assertIsNotNone(updated["completed_at"])
 
-        # Update recurrence rule ID
-        with_rec = ts.set_recurrence_rule_id(task["id"], "rec-123")
-        self.assertEqual(with_rec["recurrence_rule_id"], "rec-123")
-
         # Validation errors
         with self.assertRaises(ValueError):
             ts.create_task(title="Bad", status="invalid_status")

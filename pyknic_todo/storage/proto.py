@@ -27,8 +27,8 @@ import typing
 
 from abc import ABCMeta, abstractmethod
 
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
-from pyknic_todo.search import find_task_or_raise
+from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso
+from pyknic_todo.search import find_task_or_raise, find_task_index
 
 
 class AbstractTaskStorage(metaclass=ABCMeta):
@@ -65,15 +65,6 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         new_status: str,
     ) -> dict[str, typing.Any]:
         """Update status of a task matching the query."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def set_recurrence_rule_id(
-        self,
-        task_id_query: str,
-        recurrence_rule_id: str,
-    ) -> dict[str, typing.Any]:
-        """Attach a recurrence rule ID to a task matching the query."""
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
@@ -308,8 +299,16 @@ class AbstractStorage(metaclass=ABCMeta):
                 until_date=until_date,
                 max_occurrences=max_occurrences,
             )
-            task = self.tasks.set_recurrence_rule_id(
-                task_id_query=task_id_query,
-                recurrence_rule_id=rule["id"],
-            )
+
+            tasks = self.tasks.load_tasks()
+            target_idx = find_task_index(tasks, task_id_query)
+            task = tasks[target_idx].model_dump()  # TODO: ugly!
+            now = get_utc_now_iso()
+
+            task["recurrence_rule_id"] = rule["id"]
+            task["version"] = int(task.get("version", 1)) + 1
+            task["updated_at"] = now
+            tasks[target_idx] = Task(**task)  # TODO: uglier!
+            self.save_tasks(tasks)
+
             return task, rule
