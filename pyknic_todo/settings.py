@@ -1,5 +1,7 @@
 """Application settings using pydantic-settings."""
 
+# TODO: refactor this
+
 from __future__ import annotations
 
 from pathlib import Path

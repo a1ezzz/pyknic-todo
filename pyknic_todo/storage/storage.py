@@ -21,6 +21,9 @@
 
 """Storage layer and abstractions for pyknic-todo conforming to STORAGE.md."""
 
+# TODO: document the code
+# TODO: write tests for the code
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
