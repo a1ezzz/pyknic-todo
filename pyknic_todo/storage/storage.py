@@ -368,7 +368,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
                 completed_at=now if task_status == "done" else None,
                 deleted_at=now if task_status == "deleted" else None,
             )
-            new_task = self.from_model(task_obj)
+            new_task = task_obj.model_dump()
 
             tasks = self.load_tasks()
             tasks.append(new_task)

@@ -21,6 +21,7 @@
 
 # TODO: document the code
 # TODO: write tests for the code
+# TODO: refactor this
 
 import typing
 
@@ -78,10 +79,6 @@ class AbstractTaskStorage(metaclass=ABCMeta):
     def get_client_id(self) -> str:
         """Get the client ID associated with the storage."""
         raise NotImplementedError('This method is abstract')
-
-    @staticmethod
-    def from_model(model: Task) -> dict[str, typing.Any]:
-        return model.model_dump()
 
 
 class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
