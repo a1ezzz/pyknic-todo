@@ -59,3 +59,26 @@ class StateHistoryEvent(BaseModel):
     actor_client_id: str
     new_state: dict[str, Any]
     comment: str = ""
+
+
+class TaskDocument(BaseModel):
+    schema_version: str = Field(alias="$schema_version")
+    client_id: str
+    updated_at: str
+    items: list[Task] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class RecurrenceRuleDocument(BaseModel):
+    schema_version: str = Field(alias="$schema_version")
+    items: list[RecurrenceRule] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class StateHistoryDocument(BaseModel):
+    schema_version: str = Field(alias="$schema_version")
+    events: list[StateHistoryEvent] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}

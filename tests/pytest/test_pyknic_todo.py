@@ -11,8 +11,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pyknic_todo.cli import main
+from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
 from pyknic_todo.settings import Settings
-from pyknic_todo.storage import Storage
+from pyknic_todo.storage import (
+    HistoryStorage,
+    RecurrenceRuleStorage,
+    Storage,
+    TaskStorage,
+)
 
 
 def _concurrent_create_worker(data_dir_str: str, index: int) -> None:
@@ -406,6 +412,160 @@ class TestPyknicTodo(unittest.TestCase):
         listed = json.loads(f_out.getvalue())
         self.assertEqual(len(listed), 1)
         self.assertEqual(listed[0]["title"], "Task 2")
+
+    def test_task_storage_isolated(self) -> None:
+        task_dir = Path(self.temp_dir) / "tasks_only"
+        ts = TaskStorage(data_dir=task_dir)
+
+        # Ensure only tasks.json was created
+        self.assertTrue((task_dir / "tasks.json").exists())
+        self.assertFalse((task_dir / "recurrence_rules.json").exists())
+        self.assertFalse((task_dir / "states_history.json").exists())
+
+        # Create task
+        task = ts.create_task(
+            title="Isolated task",
+            description="Details",
+            priority="high",
+            status="pending",
+            tags=["iso"],
+        )
+        self.assertEqual(task["title"], "Isolated task")
+        self.assertEqual(task["priority"], "high")
+
+        # Read tasks
+        tasks = ts.load_tasks()
+        self.assertEqual(len(tasks), 1)
+
+        # Model representation
+        models = ts.load_task_models()
+        self.assertEqual(len(models), 1)
+        self.assertIsInstance(models[0], Task)
+        self.assertEqual(models[0].title, "Isolated task")
+
+        # Document model
+        doc_model = ts.load_document_model()
+        self.assertEqual(len(doc_model.items), 1)
+
+        # Find task
+        found = ts.find_task(task["id"])
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found["id"], task["id"])
+
+        found_model = ts.find_task_model(task["id"])
+        self.assertIsNotNone(found_model)
+        assert found_model is not None
+        self.assertEqual(found_model.id, task["id"])
+
+        # Update status
+        updated = ts.set_task_status(task["id"], "done")
+        self.assertEqual(updated["status"], "done")
+        self.assertIsNotNone(updated["completed_at"])
+
+        # Update recurrence rule ID
+        with_rec = ts.set_recurrence_rule_id(task["id"], "rec-123")
+        self.assertEqual(with_rec["recurrence_rule_id"], "rec-123")
+
+        # Validation errors
+        with self.assertRaises(ValueError):
+            ts.create_task(title="Bad", status="invalid_status")
+        with self.assertRaises(ValueError):
+            ts.create_task(title="Bad", priority="invalid_priority")
+        with self.assertRaises(KeyError):
+            ts.set_task_status("nonexistent_id", "done")
+
+    def test_recurrence_storage_isolated(self) -> None:
+        rec_dir = Path(self.temp_dir) / "rec_only"
+        rs = RecurrenceRuleStorage(data_dir=rec_dir)
+
+        # Ensure only recurrence_rules.json was created
+        self.assertTrue((rec_dir / "recurrence_rules.json").exists())
+        self.assertFalse((rec_dir / "tasks.json").exists())
+        self.assertFalse((rec_dir / "states_history.json").exists())
+
+        # Create rule
+        rule = rs.create_rule(
+            schedule_type="rrule",
+            schedule_expression="FREQ=DAILY",
+            end_condition_type="count",
+            max_occurrences=5,
+        )
+        self.assertEqual(rule["schedule_type"], "rrule")
+        self.assertEqual(rule["schedule_expression"], "FREQ=DAILY")
+        self.assertEqual(rule["end_condition"]["type"], "count")
+        self.assertEqual(rule["end_condition"]["max_occurrences"], 5)
+
+        # Read rules
+        rules = rs.load_rules()
+        self.assertEqual(len(rules), 1)
+
+        # Model representation
+        rule_models = rs.load_rule_models()
+        self.assertEqual(len(rule_models), 1)
+        self.assertIsInstance(rule_models[0], RecurrenceRule)
+        self.assertEqual(rule_models[0].schedule_expression, "FREQ=DAILY")
+
+        # Document model
+        doc_model = rs.load_document_model()
+        self.assertEqual(len(doc_model.items), 1)
+
+        # Find rule
+        found = rs.find_rule(rule["id"])
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found["id"], rule["id"])
+
+        found_model = rs.find_rule_model(rule["id"])
+        self.assertIsNotNone(found_model)
+        assert found_model is not None
+        self.assertEqual(found_model.id, rule["id"])
+
+        # Validation errors
+        with self.assertRaises(ValueError):
+            rs.create_rule(schedule_type="invalid", schedule_expression="FREQ=DAILY")
+        with self.assertRaises(ValueError):
+            rs.create_rule(schedule_type="rrule", schedule_expression="FREQ=DAILY", end_condition_type="invalid")
+
+    def test_history_storage_isolated(self) -> None:
+        hist_dir = Path(self.temp_dir) / "hist_only"
+        hs = HistoryStorage(data_dir=hist_dir)
+
+        # Ensure only states_history.json was created
+        self.assertTrue((hist_dir / "states_history.json").exists())
+        self.assertFalse((hist_dir / "tasks.json").exists())
+        self.assertFalse((hist_dir / "recurrence_rules.json").exists())
+
+        # Record event
+        event = hs.record_event(
+            task_id="t-100",
+            new_state={"status": "in_progress"},
+            actor_client_id="test-client-1",
+            comment="Started work",
+        )
+        self.assertEqual(event["task_id"], "t-100")
+        self.assertEqual(event["new_state"]["status"], "in_progress")
+        self.assertEqual(event["actor_client_id"], "test-client-1")
+        self.assertEqual(event["comment"], "Started work")
+
+        # Read history
+        events = hs.load_history()
+        self.assertEqual(len(events), 1)
+
+        # Find by task_id
+        t_events = hs.find_events_for_task("t-100")
+        self.assertEqual(len(t_events), 1)
+        self.assertEqual(len(hs.find_events_for_task("t-999")), 0)
+
+        # Model representation
+        event_models = hs.load_event_models()
+        self.assertEqual(len(event_models), 1)
+        self.assertIsInstance(event_models[0], StateHistoryEvent)
+        self.assertEqual(event_models[0].task_id, "t-100")
+
+        # Document model
+        doc_model = hs.load_document_model()
+        self.assertEqual(len(doc_model.events), 1)
 
 
 if __name__ == "__main__":
