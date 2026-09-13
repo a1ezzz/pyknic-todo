@@ -3,13 +3,17 @@
 # TODO: refactor this
 
 from .settings import Settings
-from .storage.storage import (
+
+from .storage.proto import (
     AbstractHistoryStorage,
     AbstractRecurrenceRuleStorage,
     AbstractRecurrenceStorage,
     AbstractStateHistoryStorage,
     AbstractStorage,
     AbstractTaskStorage,
+)
+
+from .storage.storage import (
     BaseEntityStorage,
     BaseJsonEntityStorage,
     HistoryStorage,
