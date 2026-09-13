@@ -462,11 +462,6 @@ class TestPyknicTodo(unittest.TestCase):
         assert found is not None
         self.assertEqual(found["id"], task["id"])
 
-        found_model = ts.find_task_model(task["id"])
-        self.assertIsNotNone(found_model)
-        assert found_model is not None
-        self.assertEqual(found_model.id, task["id"])
-
         # Update status
         updated = ts.set_task_status(task["id"], "done")
         self.assertEqual(updated["status"], "done")

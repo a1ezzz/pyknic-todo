@@ -34,7 +34,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from pyknic_todo.models import (
     EndCondition,

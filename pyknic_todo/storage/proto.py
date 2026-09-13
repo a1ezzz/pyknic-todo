@@ -22,133 +22,98 @@
 # TODO: document the code
 # TODO: write tests for the code
 
+import typing
 
-from abc import ABC, abstractmethod
-from contextlib import contextmanager
-import fcntl
-import json
-import os
-import threading
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, ContextManager, Iterator, Optional
+from abc import ABCMeta, abstractmethod
 
-from pyknic_todo.models import (
-    EndCondition,
-    RecurrenceRule,
-    RecurrenceRuleDocument,
-    StateHistoryDocument,
-    StateHistoryEvent,
-    Task,
-    TaskDocument,
-)
-from pyknic_todo.settings import Settings
-
-# =====================================================================
-# Abstract Base Classes
-# =====================================================================
+from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
 
 
-class AbstractTaskStorage(ABC):
+class AbstractTaskStorage(metaclass=ABCMeta):
     """Abstract interface for task storage backends."""
 
     @abstractmethod
-    def load_tasks(self) -> list[dict[str, Any]]:
+    def load_tasks(self) -> list[dict[str, typing.Any]]:
         """Load all tasks as dictionaries."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def save_tasks(self, tasks: list[dict[str, Any]]) -> None:
+    def save_tasks(self, tasks: list[dict[str, typing.Any]]) -> None:
         """Save tasks list."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def create_task(
         self,
         title: str,
         description: str = "",
-        priority: Optional[str] = None,
-        status: Optional[str] = None,
-        due_date: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        project_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+        priority: typing.Optional[str] = None,
+        status: typing.Optional[str] = None,
+        due_date: typing.Optional[str] = None,
+        tags: typing.Optional[list[str]] = None,
+        project_id: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         """Create a new task and persist it."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def set_task_status(
         self,
         task_id_query: str,
         new_status: str,
-    ) -> dict[str, Any]:
+    ) -> dict[str, typing.Any]:
         """Update status of a task matching the query."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def set_recurrence_rule_id(
         self,
         task_id_query: str,
         recurrence_rule_id: str,
-    ) -> dict[str, Any]:
+    ) -> dict[str, typing.Any]:
         """Attach a recurrence rule ID to a task matching the query."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def find_task(self, query: str) -> Optional[dict[str, Any]]:
+    def find_task(self, query: str) -> typing.Optional[dict[str, typing.Any]]:
         """Find a task by exact ID or unique prefix."""
-        ...
-
-    @abstractmethod
-    def find_task_or_raise(self, query: str) -> dict[str, Any]:
-        """Find a task by exact ID or prefix, raising KeyError or ValueError."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def get_client_id(self) -> str:
         """Get the client ID associated with the storage."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     # Representation methods
     @staticmethod
-    def to_model(data: dict[str, Any]) -> Task:
+    def to_model(data: dict[str, typing.Any]) -> Task:
         return Task(**data)
 
     @staticmethod
-    def from_model(model: Task) -> dict[str, Any]:
+    def from_model(model: Task) -> dict[str, typing.Any]:
         return model.model_dump()
-
-    def represent(self, task: Task | dict[str, Any]) -> dict[str, Any]:
-        if isinstance(task, Task):
-            return self.from_model(task)
-        return self.to_model(task).model_dump()
 
     def load_task_models(self) -> list[Task]:
         return [self.to_model(t) for t in self.load_tasks()]
 
-    def find_task_model(self, query: str) -> Optional[Task]:
-        task = self.find_task(query)
-        return self.to_model(task) if task is not None else None
 
-
-class AbstractRecurrenceRuleStorage(ABC):
+class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
     """Abstract interface for recurrence rule storage backends."""
 
     @abstractmethod
-    def load_recurrence_rules(self) -> list[dict[str, Any]]:
+    def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
         """Load all recurrence rules as dictionaries."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
-    def load_rules(self) -> list[dict[str, Any]]:
+    def load_rules(self) -> list[dict[str, typing.Any]]:
         return self.load_recurrence_rules()
 
     @abstractmethod
-    def save_recurrence_rules(self, rules: list[dict[str, Any]]) -> None:
+    def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
         """Save recurrence rules list."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
-    def save_rules(self, rules: list[dict[str, Any]]) -> None:
+    def save_rules(self, rules: list[dict[str, typing.Any]]) -> None:
         self.save_recurrence_rules(rules)
 
     @abstractmethod
@@ -157,27 +122,27 @@ class AbstractRecurrenceRuleStorage(ABC):
         schedule_type: str,
         schedule_expression: str,
         end_condition_type: str = "never",
-        until_date: Optional[str] = None,
-        max_occurrences: Optional[int] = None,
-    ) -> dict[str, Any]:
+        until_date: typing.Optional[str] = None,
+        max_occurrences: typing.Optional[int] = None,
+    ) -> dict[str, typing.Any]:
         """Create and persist a new recurrence rule."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def find_rule(self, rule_id: str) -> Optional[dict[str, Any]]:
+    def find_rule(self, rule_id: str) -> typing.Optional[dict[str, typing.Any]]:
         """Find a recurrence rule by ID."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     # Representation methods
     @staticmethod
-    def to_model(data: dict[str, Any]) -> RecurrenceRule:
+    def to_model(data: dict[str, typing.Any]) -> RecurrenceRule:
         return RecurrenceRule(**data)
 
     @staticmethod
-    def from_model(model: RecurrenceRule) -> dict[str, Any]:
+    def from_model(model: RecurrenceRule) -> dict[str, typing.Any]:
         return model.model_dump()
 
-    def represent(self, rule: RecurrenceRule | dict[str, Any]) -> dict[str, Any]:
+    def represent(self, rule: RecurrenceRule | dict[str, typing.Any]) -> dict[str, typing.Any]:
         if isinstance(rule, RecurrenceRule):
             return self.from_model(rule)
         return self.to_model(rule).model_dump()
@@ -185,48 +150,48 @@ class AbstractRecurrenceRuleStorage(ABC):
     def load_rule_models(self) -> list[RecurrenceRule]:
         return [self.to_model(r) for r in self.load_recurrence_rules()]
 
-    def find_rule_model(self, rule_id: str) -> Optional[RecurrenceRule]:
+    def find_rule_model(self, rule_id: str) -> typing.Optional[RecurrenceRule]:
         rule = self.find_rule(rule_id)
         return self.to_model(rule) if rule is not None else None
 
 
-class AbstractHistoryStorage(ABC):
+class AbstractHistoryStorage(metaclass=ABCMeta):
     """Abstract interface for state history storage backends."""
 
     @abstractmethod
-    def load_history(self) -> list[dict[str, Any]]:
+    def load_history(self) -> list[dict[str, typing.Any]]:
         """Load all history events as dictionaries."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
-    def load_events(self) -> list[dict[str, Any]]:
+    def load_events(self) -> list[dict[str, typing.Any]]:
         return self.load_history()
 
     @abstractmethod
-    def save_history(self, events: list[dict[str, Any]]) -> None:
+    def save_history(self, events: list[dict[str, typing.Any]]) -> None:
         """Save history events list."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
-    def save_events(self, events: list[dict[str, Any]]) -> None:
+    def save_events(self, events: list[dict[str, typing.Any]]) -> None:
         self.save_history(events)
 
     @abstractmethod
     def record_history_event(
         self,
         task_id: str,
-        new_state: dict[str, Any],
-        actor_client_id: Optional[str] = None,
-        comment: Optional[str] = None,
-    ) -> dict[str, Any]:
+        new_state: dict[str, typing.Any],
+        actor_client_id: typing.Optional[str] = None,
+        comment: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         """Record a state change event."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     def record_event(
         self,
         task_id: str,
-        new_state: dict[str, Any],
-        actor_client_id: Optional[str] = None,
-        comment: Optional[str] = None,
-    ) -> dict[str, Any]:
+        new_state: dict[str, typing.Any],
+        actor_client_id: typing.Optional[str] = None,
+        comment: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         return self.record_history_event(
             task_id=task_id,
             new_state=new_state,
@@ -237,18 +202,18 @@ class AbstractHistoryStorage(ABC):
     @abstractmethod
     def find_events_for_task(self, task_id: str) -> list[dict[str, Any]]:
         """Find history events for a given task ID."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     # Representation methods
     @staticmethod
-    def to_model(data: dict[str, Any]) -> StateHistoryEvent:
+    def to_model(data: dict[str, typing.Any]) -> StateHistoryEvent:
         return StateHistoryEvent(**data)
 
     @staticmethod
-    def from_model(model: StateHistoryEvent) -> dict[str, Any]:
+    def from_model(model: StateHistoryEvent) -> dict[str, typing.Any]:
         return model.model_dump()
 
-    def represent(self, event: StateHistoryEvent | dict[str, Any]) -> dict[str, Any]:
+    def represent(self, event: StateHistoryEvent | dict[str, typing.Any]) -> dict[str, typing.Any]:
         if isinstance(event, StateHistoryEvent):
             return self.from_model(event)
         return self.to_model(event).model_dump()
@@ -257,61 +222,61 @@ class AbstractHistoryStorage(ABC):
         return [self.to_model(e) for e in self.load_history()]
 
 
-class AbstractStorage(ABC):
+class AbstractStorage(metaclass=ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
 
     @property
     @abstractmethod
     def tasks(self) -> AbstractTaskStorage:
         """Task storage component."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @property
     @abstractmethod
     def recurrence_rules(self) -> AbstractRecurrenceRuleStorage:
         """Recurrence rule storage component."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @property
     @abstractmethod
     def history(self) -> AbstractHistoryStorage:
         """History storage component."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def lock(
         self,
         exclusive: bool = True,
         blocking: bool = True,
-    ) -> ContextManager[None]:
+    ) -> typing.ContextManager[None]:
         """Acquire synchronization lock for storage operations."""
-        ...
+        raise NotImplementedError('This method is abstract')
 
     # Common coordination methods
     def get_client_id(self) -> str:
         return self.tasks.get_client_id()
 
-    def load_tasks(self) -> list[dict[str, Any]]:
+    def load_tasks(self) -> list[dict[str, typing.Any]]:
         return self.tasks.load_tasks()
 
-    def save_tasks(self, tasks: list[dict[str, Any]]) -> None:
+    def save_tasks(self, tasks: list[dict[str, typing.Any]]) -> None:
         self.tasks.save_tasks(tasks)
 
-    def load_recurrence_rules(self) -> list[dict[str, Any]]:
+    def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
         return self.recurrence_rules.load_recurrence_rules()
 
-    def save_recurrence_rules(self, rules: list[dict[str, Any]]) -> None:
+    def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
         self.recurrence_rules.save_recurrence_rules(rules)
 
-    def load_history(self) -> list[dict[str, Any]]:
+    def load_history(self) -> list[dict[str, typing.Any]]:
         return self.history.load_history()
 
     def record_history_event(
         self,
         task_id: str,
-        new_state: dict[str, Any],
-        comment: Optional[str] = None,
-    ) -> dict[str, Any]:
+        new_state: dict[str, typing.Any],
+        comment: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         return self.history.record_history_event(
             task_id=task_id,
             new_state=new_state,
@@ -319,19 +284,19 @@ class AbstractStorage(ABC):
             comment=comment,
         )
 
-    def find_task(self, query: str) -> Optional[dict[str, Any]]:
+    def find_task(self, query: str) -> typing.Optional[dict[str, typing.Any]]:
         return self.tasks.find_task(query)
 
     def create_task(
         self,
         title: str,
         description: str = "",
-        priority: Optional[str] = None,
-        status: Optional[str] = None,
-        due_date: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        project_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+        priority: typing.Optional[str] = None,
+        status: typing.Optional[str] = None,
+        due_date: typing.Optional[str] = None,
+        tags: typing.Optional[list[str]] = None,
+        project_id: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         with self.lock(exclusive=True):
             new_task = self.tasks.create_task(
                 title=title,
@@ -354,8 +319,8 @@ class AbstractStorage(ABC):
         self,
         task_id_query: str,
         new_status: str,
-        comment: Optional[str] = None,
-    ) -> dict[str, Any]:
+        comment: typing.Optional[str] = None,
+    ) -> dict[str, typing.Any]:
         with self.lock(exclusive=True):
             task = self.tasks.set_task_status(
                 task_id_query=task_id_query,
@@ -375,9 +340,9 @@ class AbstractStorage(ABC):
         schedule_type: str,
         schedule_expression: str,
         end_condition_type: str = "never",
-        until_date: Optional[str] = None,
-        max_occurrences: Optional[int] = None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        until_date: typing.Optional[str] = None,
+        max_occurrences: typing.Optional[int] = None,
+    ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
             self.tasks.find_task_or_raise(task_id_query)
 

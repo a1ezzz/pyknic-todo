@@ -11,8 +11,11 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from .settings import Settings
-from .storage.storage import (
+from .storage.proto import (
     AbstractStorage,
+)
+
+from .storage.storage import (
     StorageFactory,
     VALID_END_CONDITIONS,
     VALID_PRIORITIES,
