@@ -306,21 +306,6 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             data = self.load_document()
             return data.get("items", [])  # type: ignore[no-any-return]
 
-    def find_task(self, query: str) -> Optional[dict[str, Any]]:
-        with self.lock(exclusive=False):
-            tasks = self.load_tasks()
-            for task in tasks:
-                if task.get("id") == query:
-                    return task
-            matches = [t for t in tasks if t.get("id", "").startswith(query)]
-            if len(matches) == 1:
-                return matches[0]
-            if len(matches) > 1:
-                raise ValueError(
-                    f"Ambiguous task ID prefix '{query}', matches {len(matches)} tasks"
-                )
-            return None
-
     def find_task_index(self, tasks: list[dict[str, Any]], query: str) -> int:
         matched = [i for i, t in enumerate(tasks) if t.get("id") == query]
         if not matched:

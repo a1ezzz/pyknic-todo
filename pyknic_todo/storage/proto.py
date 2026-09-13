@@ -75,11 +75,6 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def find_task(self, query: str) -> typing.Optional[dict[str, typing.Any]]:
-        """Find a task by exact ID or unique prefix."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
     def get_client_id(self) -> str:
         """Get the client ID associated with the storage."""
         raise NotImplementedError('This method is abstract')
@@ -275,9 +270,6 @@ class AbstractStorage(metaclass=ABCMeta):
             actor_client_id=self.get_client_id(),
             comment=comment,
         )
-
-    def find_task(self, query: str) -> typing.Optional[dict[str, typing.Any]]:
-        return self.tasks.find_task(query)
 
     def create_task(
         self,

@@ -143,12 +143,6 @@ class TestPyknicTodo(unittest.TestCase):
         doc_model = ts.load_document_model()
         self.assertEqual(len(doc_model.items), 1)
 
-        # Find task
-        found = ts.find_task(task["id"])
-        self.assertIsNotNone(found)
-        assert found is not None
-        self.assertEqual(found["id"], task["id"])
-
         # Update status
         updated = ts.set_task_status(task["id"], "done")
         self.assertEqual(updated["status"], "done")
