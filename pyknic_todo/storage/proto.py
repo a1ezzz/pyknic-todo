@@ -122,15 +122,6 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
     def to_model(data: dict[str, typing.Any]) -> RecurrenceRule:
         return RecurrenceRule(**data)
 
-    @staticmethod
-    def from_model(model: RecurrenceRule) -> dict[str, typing.Any]:
-        return model.model_dump()
-
-    def represent(self, rule: RecurrenceRule | dict[str, typing.Any]) -> dict[str, typing.Any]:
-        if isinstance(rule, RecurrenceRule):
-            return self.from_model(rule)
-        return self.to_model(rule).model_dump()
-
     def load_rule_models(self) -> list[RecurrenceRule]:
         return [self.to_model(r) for r in self.load_recurrence_rules()]
 

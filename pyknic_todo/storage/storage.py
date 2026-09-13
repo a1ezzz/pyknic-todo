@@ -518,7 +518,7 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
                 ),
                 created_at=now,
             )
-            rule = self.from_model(rule_obj)
+            rule = rule_obj.model_dump()
 
             rules = self.load_recurrence_rules()
             rules.append(rule)
