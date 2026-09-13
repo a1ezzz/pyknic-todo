@@ -39,7 +39,7 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def save_tasks(self, tasks: list[dict[str, typing.Any]]) -> None:
+    def save_tasks(self, tasks: list[Task]) -> None:
         """Save tasks list."""
         raise NotImplementedError('This method is abstract')
 
@@ -215,7 +215,7 @@ class AbstractStorage(metaclass=ABCMeta):
     def load_tasks(self) -> list[Task]:
         return self.tasks.load_tasks()
 
-    def save_tasks(self, tasks: list[dict[str, typing.Any]]) -> None:
+    def save_tasks(self, tasks: list[Task]) -> None:
         self.tasks.save_tasks(tasks)
 
     def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:

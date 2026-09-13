@@ -323,10 +323,10 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
 
     # --- Writing ---
 
-    def save_tasks(self, tasks: list[dict[str, Any]]) -> None:
+    def save_tasks(self, tasks: list[Task]) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data["items"] = tasks
+            data["items"] = [x.model_dump() for x in tasks]
             data["updated_at"] = get_utc_now_iso()
             self.save_document(data)
 
@@ -368,12 +368,11 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
                 completed_at=now if task_status == "done" else None,
                 deleted_at=now if task_status == "deleted" else None,
             )
-            new_task = task_obj.model_dump()
 
-            tasks = [x.model_dump() for x in self.load_tasks()]
-            tasks.append(new_task)
+            tasks = self.load_tasks()
+            tasks.append(task_obj)
             self.save_tasks(tasks)
-            return new_task
+            return task_obj.model_dump()
 
     def set_task_status(
         self,
@@ -403,7 +402,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
                 task["deleted_at"] = None
 
             tasks[target_idx] = task
-            self.save_tasks(tasks)
+            self.save_tasks([Task(**x) for x in tasks])
             return task
 
     def set_recurrence_rule_id(
@@ -421,7 +420,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             task["version"] = int(task.get("version", 1)) + 1
             task["updated_at"] = now
             tasks[target_idx] = task
-            self.save_tasks(tasks)
+            self.save_tasks([Task(**x) for x in tasks])
             return task
 
 
