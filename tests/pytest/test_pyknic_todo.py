@@ -13,7 +13,7 @@ from unittest.mock import patch
 from pyknic_todo.cli import main
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
 from pyknic_todo.settings import Settings
-from pyknic_todo.storage import (
+from pyknic_todo.storage.storage import (
     AbstractHistoryStorage,
     AbstractRecurrenceRuleStorage,
     AbstractStorage,

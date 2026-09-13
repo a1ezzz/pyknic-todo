@@ -1,7 +1,7 @@
 """pyknic-todo: Simple CLI todo list utility."""
 
 from .settings import Settings
-from .storage import (
+from .storage.storage import (
     AbstractHistoryStorage,
     AbstractRecurrenceRuleStorage,
     AbstractRecurrenceStorage,

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from .settings import Settings
-from .storage import (
+from .storage.storage import (
     AbstractStorage,
     StorageFactory,
     VALID_END_CONDITIONS,
