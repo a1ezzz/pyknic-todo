@@ -244,7 +244,7 @@ def is_deleted_task(task: dict[str, Any]) -> bool:
 
 
 def handle_list(storage: AbstractStorage, args: argparse.Namespace) -> int:
-    tasks = storage.load_tasks()
+    tasks = [x.model_dump() for x in storage.load_tasks()]
 
     show_all = getattr(args, "all", False) or getattr(args, "mode", None) == "all"
     show_completed_only = getattr(args, "completed", False) or getattr(args, "mode", None) == "completed"

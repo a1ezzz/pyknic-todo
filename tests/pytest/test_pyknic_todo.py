@@ -135,16 +135,16 @@ class TestPyknicTodo(unittest.TestCase):
 
         tasks = Storage(self.data_dir).load_tasks()
         self.assertEqual(len(tasks), 1)
-        task_id = tasks[0]["id"]
-        self.assertEqual(tasks[0]["title"], "Write docs")
-        self.assertEqual(tasks[0]["priority"], "high")
-        self.assertEqual(tasks[0]["tags"], ["docs", "work"])
+        task_id = tasks[0].id
+        self.assertEqual(tasks[0].title, "Write docs")
+        self.assertEqual(tasks[0].priority, "high")
+        self.assertEqual(tasks[0].tags, ["docs", "work"])
 
         # 2. Change status to in_progress
         code = main([data_arg, "status", task_id[:8], "in_progress"])
         self.assertEqual(code, 0)
         tasks = Storage(self.data_dir).load_tasks()
-        self.assertEqual(tasks[0]["status"], "in_progress")
+        self.assertEqual(tasks[0].status, "in_progress")
 
         # 3. Set recurrence
         code = main([
@@ -160,7 +160,7 @@ class TestPyknicTodo(unittest.TestCase):
         ])
         self.assertEqual(code, 0)
         tasks = Storage(self.data_dir).load_tasks()
-        self.assertIsNotNone(tasks[0]["recurrence_rule_id"])
+        self.assertIsNotNone(tasks[0].recurrence_rule_id)
 
         rules = Storage(self.data_dir).load_recurrence_rules()
         self.assertEqual(len(rules), 1)
@@ -171,7 +171,7 @@ class TestPyknicTodo(unittest.TestCase):
         code = main([data_arg, "done", task_id[:8]])
         self.assertEqual(code, 0)
         tasks = Storage(self.data_dir).load_tasks()
-        self.assertEqual(tasks[0]["status"], "done")
+        self.assertEqual(tasks[0].status, "done")
 
         # 5. List tasks
         code = main([data_arg, "list"])
@@ -247,7 +247,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(code, 0)
         tasks = Storage(settings=settings).load_tasks()
         self.assertEqual(len(tasks), 1)
-        self.assertEqual(tasks[0]["priority"], "urgent")
+        self.assertEqual(tasks[0].priority, "urgent")
 
     def test_flock_called_on_create_and_load(self) -> None:
         storage = Storage(self.data_dir)
@@ -290,7 +290,7 @@ class TestPyknicTodo(unittest.TestCase):
 
         tasks2 = storage2.load_tasks()
         self.assertEqual(len(tasks2), 1)
-        self.assertEqual(tasks2[0]["title"], "Independent task")
+        self.assertEqual(tasks2[0].title, "Independent task")
 
     def test_flock_concurrent_creates_no_lost_updates(self) -> None:
         procs = [

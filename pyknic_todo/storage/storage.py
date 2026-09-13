@@ -301,10 +301,10 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             data = self.load_document()
             return data.get("client_id", f"{self.settings.client_id_prefix}-default")  # type: ignore[no-any-return]
 
-    def load_tasks(self) -> list[dict[str, Any]]:
+    def load_tasks(self) -> list[Task]:
         with self.lock(exclusive=False):
             data = self.load_document()
-            return data.get("items", [])  # type: ignore[no-any-return]
+            return [Task(**x) for x in data.get("items", [])]
 
     def find_task_index(self, tasks: list[dict[str, Any]], query: str) -> int:
         matched = [i for i, t in enumerate(tasks) if t.get("id") == query]
@@ -317,7 +317,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
         return matched[0]
 
     def find_task_or_raise(self, query: str) -> dict[str, Any]:
-        tasks = self.load_tasks()
+        tasks = [x.model_dump() for x in self.load_tasks()]
         idx = self.find_task_index(tasks, query)
         return tasks[idx]
 
@@ -370,7 +370,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             )
             new_task = task_obj.model_dump()
 
-            tasks = self.load_tasks()
+            tasks = [x.model_dump() for x in self.load_tasks()]
             tasks.append(new_task)
             self.save_tasks(tasks)
             return new_task
@@ -384,7 +384,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             if new_status not in VALID_STATUSES:
                 raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
 
-            tasks = self.load_tasks()
+            tasks = [x.model_dump() for x in self.load_tasks()]
             target_idx = self.find_task_index(tasks, task_id_query)
             task = tasks[target_idx]
             now = get_utc_now_iso()
@@ -412,7 +412,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
         recurrence_rule_id: str,
     ) -> dict[str, Any]:
         with self.lock(exclusive=True):
-            tasks = self.load_tasks()
+            tasks = [x.model_dump() for x in self.load_tasks()]
             target_idx = self.find_task_index(tasks, task_id_query)
             task = tasks[target_idx]
             now = get_utc_now_iso()

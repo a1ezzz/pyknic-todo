@@ -34,7 +34,7 @@ class AbstractTaskStorage(metaclass=ABCMeta):
     """Abstract interface for task storage backends."""
 
     @abstractmethod
-    def load_tasks(self) -> list[dict[str, typing.Any]]:
+    def load_tasks(self) -> list[Task]:
         """Load all tasks as dictionaries."""
         raise NotImplementedError('This method is abstract')
 
@@ -212,7 +212,7 @@ class AbstractStorage(metaclass=ABCMeta):
     def get_client_id(self) -> str:
         return self.tasks.get_client_id()
 
-    def load_tasks(self) -> list[dict[str, typing.Any]]:
+    def load_tasks(self) -> list[Task]:
         return self.tasks.load_tasks()
 
     def save_tasks(self, tasks: list[dict[str, typing.Any]]) -> None:
