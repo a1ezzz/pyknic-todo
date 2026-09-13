@@ -54,6 +54,8 @@ from .proto import (
     AbstractStorage,
 )
 
+from pyknic_todo.search import find_task_index
+
 
 DEFAULT_SETTINGS = Settings()
 SCHEMA_VERSION = DEFAULT_SETTINGS.schema_version
@@ -306,21 +308,6 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             data = self.load_document()
             return [Task(**x) for x in data.get("items", [])]
 
-    def find_task_index(self, tasks: list[dict[str, Any]], query: str) -> int:
-        matched = [i for i, t in enumerate(tasks) if t.get("id") == query]
-        if not matched:
-            matched = [i for i, t in enumerate(tasks) if t.get("id", "").startswith(query)]
-        if not matched:
-            raise KeyError(f"Task '{query}' not found")
-        if len(matched) > 1:
-            raise ValueError(f"Ambiguous task ID prefix '{query}', matches {len(matched)} tasks")
-        return matched[0]
-
-    def find_task_or_raise(self, query: str) -> dict[str, Any]:
-        tasks = [x.model_dump() for x in self.load_tasks()]
-        idx = self.find_task_index(tasks, query)
-        return tasks[idx]
-
     # --- Writing ---
 
     def save_tasks(self, tasks: list[Task]) -> None:
@@ -383,9 +370,9 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             if new_status not in VALID_STATUSES:
                 raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
 
-            tasks = [x.model_dump() for x in self.load_tasks()]
-            target_idx = self.find_task_index(tasks, task_id_query)
-            task = tasks[target_idx]
+            tasks = self.load_tasks()
+            target_idx = find_task_index(tasks, task_id_query)
+            task = tasks[target_idx].model_dump()  # TODO: ugly!
             now = get_utc_now_iso()
 
             task["status"] = new_status
@@ -401,8 +388,8 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             elif task.get("deleted_at"):
                 task["deleted_at"] = None
 
-            tasks[target_idx] = task
-            self.save_tasks([Task(**x) for x in tasks])
+            tasks[target_idx] = Task(**task)  # TODO: uglier!
+            self.save_tasks(tasks)
             return task
 
     def set_recurrence_rule_id(
@@ -411,16 +398,16 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
         recurrence_rule_id: str,
     ) -> dict[str, Any]:
         with self.lock(exclusive=True):
-            tasks = [x.model_dump() for x in self.load_tasks()]
-            target_idx = self.find_task_index(tasks, task_id_query)
-            task = tasks[target_idx]
+            tasks = self.load_tasks()
+            target_idx = find_task_index(tasks, task_id_query)
+            task = tasks[target_idx].model_dump()  # TODO: ugly!
             now = get_utc_now_iso()
 
             task["recurrence_rule_id"] = recurrence_rule_id
             task["version"] = int(task.get("version", 1)) + 1
             task["updated_at"] = now
-            tasks[target_idx] = task
-            self.save_tasks([Task(**x) for x in tasks])
+            tasks[target_idx] = Task(**task)  # TODO: uglier!
+            self.save_tasks(tasks)
             return task
 
 

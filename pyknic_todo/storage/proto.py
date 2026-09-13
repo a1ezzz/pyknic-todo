@@ -28,6 +28,7 @@ import typing
 from abc import ABCMeta, abstractmethod
 
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task
+from pyknic_todo.search import find_task_or_raise
 
 
 class AbstractTaskStorage(metaclass=ABCMeta):
@@ -297,7 +298,8 @@ class AbstractStorage(metaclass=ABCMeta):
         max_occurrences: typing.Optional[int] = None,
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
-            self.tasks.find_task_or_raise(task_id_query)
+
+            find_task_or_raise(self.tasks.load_tasks(), task_id_query)  # TODO: it is better to do something with the task that was found
 
             rule = self.recurrence_rules.create_rule(
                 schedule_type=schedule_type,
