@@ -7,3 +7,5 @@ dist/
 **/__pycache__/
 .coverage
 docs/pytest/
+docs/pytest-coverage.lcov
+docs/pytest-coverage.xml
