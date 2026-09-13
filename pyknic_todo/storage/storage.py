@@ -44,7 +44,8 @@ from pyknic_todo.models import (
     StateHistoryEvent,
     Task,
     TaskDocument,
-    get_utc_now_iso
+    get_utc_now_iso,
+    VALID_STATUSES
 )
 from pyknic_todo.settings import Settings
 
@@ -62,15 +63,6 @@ DEFAULT_SETTINGS = Settings()
 SCHEMA_VERSION = DEFAULT_SETTINGS.schema_version
 DEFAULT_DATA_DIR = str(DEFAULT_SETTINGS.data_dir)
 
-VALID_STATUSES = {
-    "new",
-    "pending",
-    "in_progress",
-    "done",
-    "cancelled",
-    "skipped",
-    "deleted",
-}
 
 VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
 VALID_SCHEDULE_TYPES = {"rrule", "cron"}
@@ -296,11 +288,6 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
 
     # --- Reading ---
 
-    def get_client_id(self) -> str:
-        with self.lock(exclusive=False):
-            data = self.load_document()
-            return data.get("client_id", f"{self.settings.client_id_prefix}-default")  # type: ignore[no-any-return]
-
     def load_tasks(self) -> list[Task]:
         with self.lock(exclusive=False):
             data = self.load_document()
@@ -358,37 +345,6 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             tasks.append(task_obj)
             self.save_tasks(tasks)
             return task_obj.model_dump()
-
-    def set_task_status(
-        self,
-        task_id_query: str,
-        new_status: str,
-    ) -> dict[str, Any]:
-        with self.lock(exclusive=True):
-            if new_status not in VALID_STATUSES:
-                raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
-
-            tasks = self.load_tasks()
-            target_idx = find_task_index(tasks, task_id_query)
-            task = tasks[target_idx].model_dump()  # TODO: ugly!
-            now = get_utc_now_iso()
-
-            task["status"] = new_status
-            task["version"] = int(task.get("version", 1)) + 1
-            task["updated_at"] = now
-            if new_status == "done":
-                task["completed_at"] = now
-            elif task.get("completed_at"):
-                task["completed_at"] = None
-
-            if new_status == "deleted":
-                task["deleted_at"] = now
-            elif task.get("deleted_at"):
-                task["deleted_at"] = None
-
-            tasks[target_idx] = Task(**task)  # TODO: uglier!
-            self.save_tasks(tasks)
-            return task
 
 
 class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntityStorage):

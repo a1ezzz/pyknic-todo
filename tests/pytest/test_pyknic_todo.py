@@ -450,18 +450,11 @@ class TestPyknicTodo(unittest.TestCase):
         doc_model = ts.load_document_model()
         self.assertEqual(len(doc_model.items), 1)
 
-        # Update status
-        updated = ts.set_task_status(task["id"], "done")
-        self.assertEqual(updated["status"], "done")
-        self.assertIsNotNone(updated["completed_at"])
-
         # Validation errors
         with self.assertRaises(ValueError):
             ts.create_task(title="Bad", status="invalid_status")
         with self.assertRaises(ValueError):
             ts.create_task(title="Bad", priority="invalid_priority")
-        with self.assertRaises(KeyError):
-            ts.set_task_status("nonexistent_id", "done")
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"

@@ -24,10 +24,11 @@
 # TODO: refactor this
 
 import typing
+import uuid
 
 from abc import ABCMeta, abstractmethod
 
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso
+from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso, VALID_STATUSES
 from pyknic_todo.search import find_task_or_raise, find_task_index
 
 
@@ -58,19 +59,7 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         """Create a new task and persist it."""
         raise NotImplementedError('This method is abstract')
 
-    @abstractmethod
-    def set_task_status(
-        self,
-        task_id_query: str,
-        new_status: str,
-    ) -> dict[str, typing.Any]:
-        """Update status of a task matching the query."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def get_client_id(self) -> str:
-        """Get the client ID associated with the storage."""
-        raise NotImplementedError('This method is abstract')
+    # TODO: add update_task method!!!
 
 
 class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
@@ -202,7 +191,8 @@ class AbstractStorage(metaclass=ABCMeta):
 
     # Common coordination methods
     def get_client_id(self) -> str:
-        return self.tasks.get_client_id()
+        # TODO: it must be persistent!
+        return str(uuid.uuid4())
 
     def load_tasks(self) -> list[Task]:
         return self.tasks.load_tasks()
@@ -267,10 +257,31 @@ class AbstractStorage(metaclass=ABCMeta):
         comment: typing.Optional[str] = None,
     ) -> dict[str, typing.Any]:
         with self.lock(exclusive=True):
-            task = self.tasks.set_task_status(
-                task_id_query=task_id_query,
-                new_status=new_status,
-            )
+
+            if new_status not in VALID_STATUSES:
+                raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
+
+            tasks = self.tasks.load_tasks()
+            target_idx = find_task_index(tasks, task_id_query)
+            task = tasks[target_idx].model_dump()  # TODO: ugly!
+            now = get_utc_now_iso()
+
+            task["status"] = new_status
+            task["version"] = int(task.get("version", 1)) + 1
+            task["updated_at"] = now
+            if new_status == "done":
+                task["completed_at"] = now
+            elif task.get("completed_at"):
+                task["completed_at"] = None
+
+            if new_status == "deleted":
+                task["deleted_at"] = now
+            elif task.get("deleted_at"):
+                task["deleted_at"] = None
+
+            tasks[target_idx] = Task(**task)  # TODO: uglier!
+            self.tasks.save_tasks(tasks)
+
             self.history.record_history_event(
                 task_id=task["id"],
                 new_state={"status": new_status},

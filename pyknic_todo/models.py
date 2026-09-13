@@ -1,6 +1,7 @@
 """Data models validated with Pydantic."""
 
 # TODO: refactor this
+# TODO: add client_id somewhere! (it should be persistent somehow)
 
 from __future__ import annotations
 
@@ -22,6 +23,17 @@ TaskStatus = Literal[
 TaskPriority = Literal["low", "medium", "high", "urgent"]
 ScheduleType = Literal["rrule", "cron"]
 EndConditionType = Literal["never", "until_date", "count"]
+
+
+VALID_STATUSES = {
+    "new",
+    "pending",
+    "in_progress",
+    "done",
+    "cancelled",
+    "skipped",
+    "deleted",
+}
 
 
 def get_utc_now_iso() -> str:
