@@ -117,17 +117,12 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         """Find a recurrence rule by ID."""
         raise NotImplementedError('This method is abstract')
 
-    # Representation methods
-    @staticmethod
-    def to_model(data: dict[str, typing.Any]) -> RecurrenceRule:
-        return RecurrenceRule(**data)
-
     def load_rule_models(self) -> list[RecurrenceRule]:
-        return [self.to_model(r) for r in self.load_recurrence_rules()]
+        return [RecurrenceRule(**r) for r in self.load_recurrence_rules()]
 
     def find_rule_model(self, rule_id: str) -> typing.Optional[RecurrenceRule]:
         rule = self.find_rule(rule_id)
-        return self.to_model(rule) if rule is not None else None
+        return RecurrenceRule(**rule) if rule is not None else None
 
 
 class AbstractHistoryStorage(metaclass=ABCMeta):
