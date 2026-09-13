@@ -179,15 +179,6 @@ class AbstractHistoryStorage(metaclass=ABCMeta):
     def to_model(data: dict[str, typing.Any]) -> StateHistoryEvent:
         return StateHistoryEvent(**data)
 
-    @staticmethod
-    def from_model(model: StateHistoryEvent) -> dict[str, typing.Any]:
-        return model.model_dump()
-
-    def represent(self, event: StateHistoryEvent | dict[str, typing.Any]) -> dict[str, typing.Any]:
-        if isinstance(event, StateHistoryEvent):
-            return self.from_model(event)
-        return self.to_model(event).model_dump()
-
     def load_event_models(self) -> list[StateHistoryEvent]:
         return [self.to_model(e) for e in self.load_history()]
 

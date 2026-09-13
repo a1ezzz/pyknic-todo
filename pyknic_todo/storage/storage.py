@@ -605,7 +605,7 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
                 new_state=new_state,
                 comment=comment or "",
             )
-            event = self.from_model(event_obj)
+            event = event_obj.model_dump()
             data.setdefault("events", []).append(event)
             self.save_document(data)
             return event
