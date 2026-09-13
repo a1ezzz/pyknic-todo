@@ -1,8 +1,9 @@
 opencode.json
 .venv
-data
+data/
 pyknic_todo.egg-info/
-build
+build/
+dist/
 **/__pycache__/
 .coverage
 docs/pytest/
