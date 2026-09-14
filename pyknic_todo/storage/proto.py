@@ -82,18 +82,7 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def append_task(
-        self,
-        title: str,
-        priority: str,
-        status: str,
-        description: str = "",
-        due_date: typing.Optional[str] = None,
-        tags: typing.Optional[list[str]] = None,
-        project_id: typing.Optional[str] = None,
-    ) -> Task:
-        """Create a new task and persist it."""
-        # TODO: replace arguments to a Task object!
+    def append_task(self, task: Task) -> Task:
         # TODO: replace return type by None!
         raise NotImplementedError('This method is abstract')
 
@@ -276,13 +265,15 @@ class AbstractStorage(metaclass=ABCMeta):
 
         with self.lock(exclusive=True):
             task = self.tasks.append_task(
-                title=title,
-                description=description,
-                priority=priority or settings.default_priority,
-                status=status or settings.default_status,
-                due_date=due_date,
-                tags=tags,
-                project_id=project_id,
+                Task.create(
+                    title=title,
+                    description=description,
+                    priority=priority or settings.default_priority,
+                    status=status or settings.default_status,
+                    due_date=due_date,
+                    tags=tags,
+                    project_id=project_id,
+                )
             )
 
             new_task = task.model_dump()

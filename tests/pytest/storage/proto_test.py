@@ -126,11 +126,13 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Create task
         task = ts.append_task(
-            title="Isolated task",
-            description="Details",
-            priority="high",
-            status="pending",
-            tags=["iso"],
+            Task.create(
+                title="Isolated task",
+                description="Details",
+                priority="high",
+                status="pending",
+                tags=["iso"],
+            )
         ).model_dump()
         self.assertEqual(task["title"], "Isolated task")
         self.assertEqual(task["priority"], "high")
@@ -145,9 +147,13 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Validation errors
         with self.assertRaises(ValueError):
-            ts.append_task(title="Bad", status="invalid_status", priority="low")
+            ts.append_task(
+                Task.create(title="Bad", status="invalid_status", priority="low")
+            )
         with self.assertRaises(ValueError):
-            ts.append_task(title="Bad", status="new", priority="invalid_priority")
+            ts.append_task(
+                Task.create(title="Bad", status="new", priority="invalid_priority")
+            )
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"

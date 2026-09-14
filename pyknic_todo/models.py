@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from datetime import datetime, timezone
 
 from typing import Any, Literal, Optional
@@ -24,6 +26,7 @@ TaskPriority = Literal["low", "medium", "high", "urgent"]
 ScheduleType = Literal["rrule", "cron"]
 EndConditionType = Literal["never", "until_date", "count"]
 
+VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
 
 VALID_STATUSES = {
     "new",
@@ -70,6 +73,46 @@ class Task(BaseModel):
     updated_at: str
     completed_at: Optional[str] = None
     deleted_at: Optional[str] = None
+
+    @staticmethod
+    def create(
+        title: str,
+        priority: str,
+        status: str,
+        description: str = "",
+        due_date: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        project_id: Optional[str] = None,
+    ) -> 'Task':
+
+        # TODO: is this ok, or better to use direct Task() call?
+
+        if status not in VALID_STATUSES:
+            raise ValueError(f"Invalid status '{status}'. Valid statuses: {sorted(VALID_STATUSES)}")
+        if priority not in VALID_PRIORITIES:
+            raise ValueError(f"Invalid priority '{priority}'. Valid priorities: {sorted(VALID_PRIORITIES)}")
+
+        now = get_utc_now_iso()
+        task_id = str(uuid.uuid4())
+        task_obj = Task(
+            id=task_id,
+            project_id=project_id,
+            title=title.strip(),
+            description=description.strip() if description else "",
+            status=status,
+            priority=priority,
+            due_date=due_date,
+            tags=tags or [],
+            recurrence_rule_id=None,
+            parent_recurrence_task_id=None,
+            version=1,
+            created_at=now,
+            updated_at=now,
+            completed_at=now if status == "done" else None,
+            deleted_at=now if status == "deleted" else None,
+        )
+
+        return task_obj
 
 
 class StateHistoryEvent(BaseModel):

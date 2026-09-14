@@ -48,7 +48,8 @@ from pyknic_todo.models import (
     Task,
     TaskDocument,
     get_utc_now_iso,
-    VALID_STATUSES
+    VALID_STATUSES,
+    VALID_PRIORITIES
 )
 from pyknic_todo.settings import Settings
 
@@ -66,7 +67,6 @@ SCHEMA_VERSION = DEFAULT_SETTINGS.schema_version
 DEFAULT_DATA_DIR = str(DEFAULT_SETTINGS.data_dir)
 
 
-VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
 VALID_SCHEDULE_TYPES = {"rrule", "cron"}
 VALID_END_CONDITIONS = {"never", "until_date", "count"}
 
@@ -347,47 +347,12 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
         return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
-    def append_task(
-        self,
-        title: str,
-        priority: str,
-        status: str,
-        description: str = "",
-        due_date: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        project_id: Optional[str] = None,
-    ) -> Task:
+    def append_task(self, task: Task) -> Task:
         with self.lock(exclusive=True):
-
-            if status not in VALID_STATUSES:
-                raise ValueError(f"Invalid status '{status}'. Valid statuses: {sorted(VALID_STATUSES)}")
-            if priority not in VALID_PRIORITIES:
-                raise ValueError(f"Invalid priority '{priority}'. Valid priorities: {sorted(VALID_PRIORITIES)}")
-
-            now = get_utc_now_iso()
-            task_id = str(uuid.uuid4())
-            task_obj = Task(
-                id=task_id,
-                project_id=project_id,
-                title=title.strip(),
-                description=description.strip() if description else "",
-                status=status,
-                priority=priority,
-                due_date=due_date,
-                tags=tags or [],
-                recurrence_rule_id=None,
-                parent_recurrence_task_id=None,
-                version=1,
-                created_at=now,
-                updated_at=now,
-                completed_at=now if status == "done" else None,
-                deleted_at=now if status == "deleted" else None,
-            )
-
             tasks = self.load_tasks()
-            tasks.append(task_obj)
+            tasks.append(task)
             self.save_tasks(tasks)
-            return task_obj
+            return task
 
 
 class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntityStorage):
