@@ -64,6 +64,7 @@ class TaskStorageUpdaterContext(metaclass=ABCMeta):
 
 class AbstractTaskStorage(metaclass=ABCMeta):
     """Abstract interface for task storage backends."""
+    # TODO: is there should be some clean-up method (deleted tasks removing)? -- please note synchronization!
 
     @abstractmethod
     def load_tasks(self) -> list[Task]:
@@ -89,6 +90,8 @@ class AbstractTaskStorage(metaclass=ABCMeta):
 
 class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
     """Abstract interface for recurrence rule storage backends."""
+    # TODO: is the "updater_context" method require?
+    # TODO: is there should be some clean-up method for orphaned rules (rules without tasks)?
 
     @abstractmethod
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
@@ -108,55 +111,27 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
 
 class AbstractHistoryStorage(metaclass=ABCMeta):
     """Abstract interface for state history storage backends."""
+    # TODO: is there should be some clean-up method for orphaned events (events without tasks)?
 
     @abstractmethod
-    def load_history(self) -> list[dict[str, typing.Any]]:
+    def load_history(self) -> list[StateHistoryEvent]:
         """Load all history events as dictionaries."""
         raise NotImplementedError('This method is abstract')
 
-    def load_events(self) -> list[dict[str, typing.Any]]:
-        return self.load_history()
-
     @abstractmethod
-    def save_history(self, events: list[dict[str, typing.Any]]) -> None:
+    def save_history(self, events: list[StateHistoryEvent]) -> None:
         """Save history events list."""
         raise NotImplementedError('This method is abstract')
 
-    def save_events(self, events: list[dict[str, typing.Any]]) -> None:
-        self.save_history(events)
-
     @abstractmethod
-    def record_history_event(
-        self,
-        task_id: str,
-        new_state: dict[str, typing.Any],
-        actor_client_id: typing.Optional[str] = None,
-        comment: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
+    def record_history_event(self, event: StateHistoryEvent) -> None:
         """Record a state change event."""
         raise NotImplementedError('This method is abstract')
 
-    def record_event(
-        self,
-        task_id: str,
-        new_state: dict[str, typing.Any],
-        actor_client_id: typing.Optional[str] = None,
-        comment: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
-        return self.record_history_event(
-            task_id=task_id,
-            new_state=new_state,
-            actor_client_id=actor_client_id,
-            comment=comment,
-        )
-
     @abstractmethod
-    def find_events_for_task(self, task_id: str) -> list[dict[str, typing.Any]]:
+    def find_events_for_task(self, task_id: str) -> list[StateHistoryEvent]:
         """Find history events for a given task ID."""
         raise NotImplementedError('This method is abstract')
-
-    def load_event_models(self) -> list[StateHistoryEvent]:
-        return [StateHistoryEvent(**e) for e in self.load_history()]
 
 
 class AbstractStorage(metaclass=ABCMeta):
@@ -206,7 +181,7 @@ class AbstractStorage(metaclass=ABCMeta):
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         self.recurrence_rules.save_recurrence_rules(rules)
 
-    def load_history(self) -> list[dict[str, typing.Any]]:
+    def load_history(self) -> list[StateHistoryEvent]:
         return self.history.load_history()
 
     def record_history_event(
@@ -254,10 +229,12 @@ class AbstractStorage(metaclass=ABCMeta):
             new_task = task.model_dump()
 
             self.history.record_history_event(
-                task_id=new_task["id"],
-                new_state={"status": new_task["status"]},
-                actor_client_id=self.get_client_id(),
-                comment="Created via CLI",
+                StateHistoryEvent.create(
+                    task_id=new_task["id"],
+                    new_state={"status": new_task["status"]},
+                    actor_client_id=self.get_client_id(),
+                    comment="Created via CLI",
+                )
             )
             return new_task
 
@@ -293,10 +270,12 @@ class AbstractStorage(metaclass=ABCMeta):
                 tc.commit()
 
                 self.history.record_history_event(
-                    task_id=task.id,
-                    new_state={"status": new_status},
-                    actor_client_id=self.get_client_id(),
-                    comment=comment or f"Status changed to {new_status} via CLI",
+                    StateHistoryEvent.create(
+                        task_id=task.id,
+                        new_state={"status": new_status},
+                        actor_client_id=self.get_client_id(),
+                        comment=comment or f"Status changed to {new_status} via CLI",
+                    )
                 )
 
                 return task.model_dump()

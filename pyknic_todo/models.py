@@ -158,6 +158,23 @@ class StateHistoryEvent(BaseModel):
     new_state: dict[str, Any]
     comment: str = ""
 
+    @staticmethod
+    def create(
+        task_id: str,
+        new_state: dict[str, Any],
+        actor_client_id: Optional[str] = None,
+        comment: Optional[str] = None
+    ) -> 'StateHistoryEvent':
+        client_id = actor_client_id or str(uuid.uuid4())  # TODO: client_id should be persistent somewhere!
+        return StateHistoryEvent(
+            id=f"evt-{uuid.uuid4()}",
+            task_id=task_id,
+            timestamp=get_utc_now_iso(),
+            actor_client_id=client_id,
+            new_state=new_state,
+            comment=comment or "",
+        )
+
 
 class TaskDocument(BaseModel):
     schema_version: str = Field(alias="$schema_version")

@@ -461,45 +461,28 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
 
     # --- Reading ---
 
-    def load_history(self) -> list[dict[str, Any]]:
+    def load_history(self) -> list[StateHistoryEvent]:
         with self.lock(exclusive=False):
             data = self.load_document()
-            return data.get("events", [])  # type: ignore[no-any-return]
+            return [StateHistoryEvent(**e) for e in data.get("events", [])]
 
-    def find_events_for_task(self, task_id: str) -> list[dict[str, Any]]:
+    def find_events_for_task(self, task_id: str) -> list[StateHistoryEvent]:
         with self.lock(exclusive=False):
-            return [e for e in self.load_history() if e.get("task_id") == task_id]
+            return [e for e in self.load_history() if e.task_id == task_id]
 
     # --- Writing ---
 
-    def save_history(self, events: list[dict[str, Any]]) -> None:
+    def save_history(self, events: list[StateHistoryEvent]) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data["events"] = events
+            data["events"] = [x.model_dump() for x in events]
             self.save_document(data)
 
-    def record_history_event(
-        self,
-        task_id: str,
-        new_state: dict[str, Any],
-        actor_client_id: Optional[str] = None,
-        comment: Optional[str] = None,
-    ) -> dict[str, Any]:
+    def record_history_event(self, event: StateHistoryEvent) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            client_id = actor_client_id or f"{self.settings.client_id_prefix}-default"
-            event_obj = StateHistoryEvent(
-                id=f"evt-{uuid.uuid4().hex[:8]}",
-                task_id=task_id,
-                timestamp=get_utc_now_iso(),
-                actor_client_id=client_id,
-                new_state=new_state,
-                comment=comment or "",
-            )
-            event = event_obj.model_dump()
-            data.setdefault("events", []).append(event)
+            data.setdefault("events", []).append(event.model_dump())
             self.save_document(data)
-            return event
 
 
 class JsonStorage(StorageLock, AbstractStorage):

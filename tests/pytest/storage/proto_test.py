@@ -60,9 +60,9 @@ class TestPyknicTodo(unittest.TestCase):
         # Check history contains 3 events
         history = storage.load_history()
         self.assertEqual(len(history), 3)
-        self.assertEqual(history[1]["new_state"]["status"], "in_progress")
-        self.assertEqual(history[1]["comment"], "Started working")
-        self.assertEqual(history[2]["new_state"]["status"], "done")
+        self.assertEqual(history[1].new_state['status'], "in_progress")
+        self.assertEqual(history[1].comment, "Started working")
+        self.assertEqual(history[2].new_state['status'], "done")
 
     def test_cli_end_to_end(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
@@ -206,16 +206,17 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertFalse((hist_dir / "recurrence_rules.json").exists())
 
         # Record event
-        event = hs.record_event(
+        event = StateHistoryEvent.create(
             task_id="t-100",
             new_state={"status": "in_progress"},
             actor_client_id="test-client-1",
             comment="Started work",
         )
-        self.assertEqual(event["task_id"], "t-100")
-        self.assertEqual(event["new_state"]["status"], "in_progress")
-        self.assertEqual(event["actor_client_id"], "test-client-1")
-        self.assertEqual(event["comment"], "Started work")
+        hs.record_history_event(event)
+        self.assertEqual(event.task_id, "t-100")
+        self.assertEqual(event.new_state["status"], "in_progress")
+        self.assertEqual(event.actor_client_id, "test-client-1")
+        self.assertEqual(event.comment, "Started work")
 
         # Read history
         events = hs.load_history()
@@ -227,7 +228,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(len(hs.find_events_for_task("t-999")), 0)
 
         # Model representation
-        event_models = hs.load_event_models()
+        event_models = hs.load_history()
         self.assertEqual(len(event_models), 1)
         self.assertIsInstance(event_models[0], StateHistoryEvent)
         self.assertEqual(event_models[0].task_id, "t-100")
