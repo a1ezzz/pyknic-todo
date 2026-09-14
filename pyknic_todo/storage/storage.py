@@ -399,15 +399,15 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
 
     # --- Reading ---
 
-    def load_recurrence_rules(self) -> list[dict[str, Any]]:
+    def load_recurrence_rules(self) -> list[RecurrenceRule]:
         with self.lock(exclusive=False):
             data = self.load_document()
-            return data.get("items", [])  # type: ignore[no-any-return]
+            return [RecurrenceRule(**x) for x in data.get("items", [])]  # type: ignore[no-any-return]
 
-    def find_rule(self, rule_id: str) -> Optional[dict[str, Any]]:
+    def find_rule(self, rule_id: str) -> Optional[RecurrenceRule]:
         with self.lock(exclusive=False):
             for rule in self.load_recurrence_rules():
-                if rule.get("id") == rule_id:
+                if rule.id == rule_id:
                     return rule
             return None
 
@@ -450,7 +450,7 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             )
             rule = rule_obj.model_dump()
 
-            rules = self.load_recurrence_rules()
+            rules = [x.model_dump() for x in self.load_recurrence_rules()]  # TODO: junky
             rules.append(rule)
             self.save_recurrence_rules(rules)
             return rule

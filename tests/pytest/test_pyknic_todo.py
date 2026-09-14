@@ -483,11 +483,11 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(rule["end_condition"]["max_occurrences"], 5)
 
         # Read rules
-        rules = rs.load_rules()
+        rules = rs.load_recurrence_rules()
         self.assertEqual(len(rules), 1)
 
         # Model representation
-        rule_models = rs.load_rule_models()
+        rule_models = rs.load_recurrence_rules()
         self.assertEqual(len(rule_models), 1)
         self.assertIsInstance(rule_models[0], RecurrenceRule)
         self.assertEqual(rule_models[0].schedule_expression, "FREQ=DAILY")
@@ -500,12 +500,7 @@ class TestPyknicTodo(unittest.TestCase):
         found = rs.find_rule(rule["id"])
         self.assertIsNotNone(found)
         assert found is not None
-        self.assertEqual(found["id"], rule["id"])
-
-        found_model = rs.find_rule_model(rule["id"])
-        self.assertIsNotNone(found_model)
-        assert found_model is not None
-        self.assertEqual(found_model.id, rule["id"])
+        self.assertEqual(found.id, rule["id"])
 
         # Validation errors
         with self.assertRaises(ValueError):

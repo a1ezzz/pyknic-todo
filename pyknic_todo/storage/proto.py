@@ -91,20 +91,14 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
     """Abstract interface for recurrence rule storage backends."""
 
     @abstractmethod
-    def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
+    def load_recurrence_rules(self) -> list[RecurrenceRule]:
         """Load all recurrence rules as dictionaries."""
         raise NotImplementedError('This method is abstract')
-
-    def load_rules(self) -> list[dict[str, typing.Any]]:
-        return self.load_recurrence_rules()
 
     @abstractmethod
     def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
         """Save recurrence rules list."""
         raise NotImplementedError('This method is abstract')
-
-    def save_rules(self, rules: list[dict[str, typing.Any]]) -> None:
-        self.save_recurrence_rules(rules)
 
     @abstractmethod
     def create_rule(
@@ -119,16 +113,9 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def find_rule(self, rule_id: str) -> typing.Optional[dict[str, typing.Any]]:
+    def find_rule(self, rule_id: str) -> typing.Optional[RecurrenceRule]:
         """Find a recurrence rule by ID."""
         raise NotImplementedError('This method is abstract')
-
-    def load_rule_models(self) -> list[RecurrenceRule]:
-        return [RecurrenceRule(**r) for r in self.load_recurrence_rules()]
-
-    def find_rule_model(self, rule_id: str) -> typing.Optional[RecurrenceRule]:
-        rule = self.find_rule(rule_id)
-        return RecurrenceRule(**rule) if rule is not None else None
 
 
 class AbstractHistoryStorage(metaclass=ABCMeta):
@@ -226,7 +213,7 @@ class AbstractStorage(metaclass=ABCMeta):
         self.tasks.save_tasks(tasks)
 
     def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
-        return self.recurrence_rules.load_recurrence_rules()
+        return [x.model_dump() for x in self.recurrence_rules.load_recurrence_rules()]
 
     def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
         self.recurrence_rules.save_recurrence_rules(rules)
