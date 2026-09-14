@@ -23,13 +23,37 @@
 # TODO: write tests for the code
 # TODO: refactor this
 
+import types
 import typing
 import uuid
 
 from abc import ABCMeta, abstractmethod
 
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso, VALID_STATUSES
-from pyknic_todo.search import find_task_or_raise, find_task_index
+
+
+class TaskStorageUpdaterContext(metaclass=ABCMeta):
+    # TODO: add docstring
+
+    def __enter__(self) -> typing.Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: typing.Optional[typing.Type[BaseException]],
+        exc_val: typing.Optional[BaseException],
+        exc_tb: typing.Optional[types.TracebackType]
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def __call__(self) -> Task:
+        raise NotImplementedError('This method is abstract')
+
+    @abstractmethod
+    def commit(self) -> None:
+        # TODO: there is a consistency issue -- this context may be saved, but a related one may be missing =(
+        raise NotImplementedError('This method is abstract')
 
 
 class AbstractTaskStorage(metaclass=ABCMeta):
@@ -46,6 +70,11 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
+    def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
+        # TODO: add docstring
+        raise NotImplementedError('This method is abstract')
+
+    @abstractmethod
     def create_task(
         self,
         title: str,
@@ -58,8 +87,6 @@ class AbstractTaskStorage(metaclass=ABCMeta):
     ) -> dict[str, typing.Any]:
         """Create a new task and persist it."""
         raise NotImplementedError('This method is abstract')
-
-    # TODO: add update_task method!!!
 
 
 class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
@@ -261,34 +288,34 @@ class AbstractStorage(metaclass=ABCMeta):
             if new_status not in VALID_STATUSES:
                 raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
 
-            tasks = self.tasks.load_tasks()
-            target_idx = find_task_index(tasks, task_id_query)
-            task = tasks[target_idx].model_dump()  # TODO: ugly!
-            now = get_utc_now_iso()
+            with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
+                task = tc()
 
-            task["status"] = new_status
-            task["version"] = int(task.get("version", 1)) + 1
-            task["updated_at"] = now
-            if new_status == "done":
-                task["completed_at"] = now
-            elif task.get("completed_at"):
-                task["completed_at"] = None
+                now = get_utc_now_iso()
 
-            if new_status == "deleted":
-                task["deleted_at"] = now
-            elif task.get("deleted_at"):
-                task["deleted_at"] = None
+                task.status = new_status  # type: ignore[assignment]
+                task.version = int(task.version or 1) + 1
+                task.updated_at = now
+                if new_status == "done":
+                    task.completed_at = now
+                elif task.completed_at:
+                    task.completed_at = None
 
-            tasks[target_idx] = Task(**task)  # TODO: uglier!
-            self.tasks.save_tasks(tasks)
+                if new_status == "deleted":
+                    task.deleted_at = now
+                elif task.deleted_at:
+                    task.deleted_at = None
 
-            self.history.record_history_event(
-                task_id=task["id"],
-                new_state={"status": new_status},
-                actor_client_id=self.get_client_id(),
-                comment=comment or f"Status changed to {new_status} via CLI",
-            )
-            return task
+                tc.commit()
+
+                self.history.record_history_event(
+                    task_id=task.id,
+                    new_state={"status": new_status},
+                    actor_client_id=self.get_client_id(),
+                    comment=comment or f"Status changed to {new_status} via CLI",
+                )
+
+                return task.model_dump()
 
     def set_task_recurrence(
         self,
@@ -301,8 +328,6 @@ class AbstractStorage(metaclass=ABCMeta):
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
 
-            find_task_or_raise(self.tasks.load_tasks(), task_id_query)  # TODO: it is better to do something with the task that was found
-
             rule = self.recurrence_rules.create_rule(
                 schedule_type=schedule_type,
                 schedule_expression=schedule_expression,
@@ -311,15 +336,12 @@ class AbstractStorage(metaclass=ABCMeta):
                 max_occurrences=max_occurrences,
             )
 
-            tasks = self.tasks.load_tasks()
-            target_idx = find_task_index(tasks, task_id_query)
-            task = tasks[target_idx].model_dump()  # TODO: ugly!
-            now = get_utc_now_iso()
+            with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
+                task = tc()
 
-            task["recurrence_rule_id"] = rule["id"]
-            task["version"] = int(task.get("version", 1)) + 1
-            task["updated_at"] = now
-            tasks[target_idx] = Task(**task)  # TODO: uglier!
-            self.save_tasks(tasks)
+                task.recurrence_rule_id = rule["id"]
+                task.version = int(task.version or 1) + 1
+                task.updated_at = get_utc_now_iso()
 
-            return task, rule
+                tc.commit()
+                return task.model_dump(), rule  # TODO: ugly!

@@ -23,6 +23,9 @@
 
 # TODO: document the code
 # TODO: write tests for the code
+# TODO: may be it is better to search with a search engine that works in conjuction with storage engine. This may help to:
+#   - not to load JSON files multiple times!
+#   - not to load everything from SQL-a-like storages
 
 from __future__ import annotations
 
@@ -54,9 +57,8 @@ from .proto import (
     AbstractRecurrenceRuleStorage,
     AbstractHistoryStorage,
     AbstractStorage,
+    TaskStorageUpdaterContext
 )
-
-from pyknic_todo.search import find_task_index
 
 
 DEFAULT_SETTINGS = Settings()
@@ -67,7 +69,6 @@ DEFAULT_DATA_DIR = str(DEFAULT_SETTINGS.data_dir)
 VALID_PRIORITIES = {"low", "medium", "high", "urgent"}
 VALID_SCHEDULE_TYPES = {"rrule", "cron"}
 VALID_END_CONDITIONS = {"never", "until_date", "count"}
-
 
 
 # =====================================================================
@@ -244,6 +245,45 @@ BaseEntityStorage = BaseJsonEntityStorage
 class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     """JSON file-based implementation of TaskStorage."""
 
+    class UpdaterContext(TaskStorageUpdaterContext):
+        # TODO: update docstring
+
+        def __init__(self, storage: AbstractTaskStorage, id_query: str, query_full_match: bool = True):
+            TaskStorageUpdaterContext.__init__(self)
+            self.__storage = storage
+            self.__all_tasks = self.__storage.load_tasks()
+            self.__task = self.__find_task(id_query, full_match=query_full_match)
+
+        def __find_task(self, id_query: str, full_match: bool = False) -> Task:
+            # TODO: please note! there is a code that relay on exceptions int this code
+
+            partial_match = []
+            fully_matched = None
+            for t in self.__all_tasks:
+                if t.id.startswith(id_query):
+                    if t.id == id_query:
+                        if fully_matched is not None:
+                            raise ValueError(f"Ambiguous task ID prefix '{id_query}'")
+                        fully_matched = t
+                    elif not full_match:
+                        partial_match.append(t)
+
+            if fully_matched is not None:
+                return fully_matched
+
+            if partial_match:
+                if len(partial_match) > 1:
+                    raise ValueError(f"Ambiguous task ID prefix '{id_query}', matches {len(partial_match)} tasks")
+                return partial_match[0]
+
+            raise KeyError(f"Task '{id_query}' not found")
+
+        def __call__(self) -> Task:
+            return self.__task
+
+        def commit(self) -> None:
+            self.__storage.save_tasks(self.__all_tasks)
+
     def __init__(
         self,
         file_path: Optional[str | Path] = None,
@@ -301,6 +341,9 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             data["items"] = [x.model_dump() for x in tasks]
             data["updated_at"] = get_utc_now_iso()
             self.save_document(data)
+
+    def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
+        return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
     def create_task(
         self,
