@@ -101,20 +101,8 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def append_recurrence_rule(
-        self,
-        schedule_type: str,
-        schedule_expression: str,
-        end_condition_type: str = "never",
-        until_date: typing.Optional[str] = None,
-        max_occurrences: typing.Optional[int] = None,
-    ) -> RecurrenceRule:
+    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
         """Create and persist a new recurrence rule."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def find_rule(self, rule_id: str) -> typing.Optional[RecurrenceRule]:
-        """Find a recurrence rule by ID."""
         raise NotImplementedError('This method is abstract')
 
 
@@ -215,7 +203,7 @@ class AbstractStorage(metaclass=ABCMeta):
     def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
         return [x.model_dump() for x in self.recurrence_rules.load_recurrence_rules()]
 
-    def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
+    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         self.recurrence_rules.save_recurrence_rules(rules)
 
     def load_history(self) -> list[dict[str, typing.Any]]:
@@ -324,13 +312,14 @@ class AbstractStorage(metaclass=ABCMeta):
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
 
-            rule = self.recurrence_rules.append_recurrence_rule(
-                schedule_type=schedule_type,
-                schedule_expression=schedule_expression,
-                end_condition_type=end_condition_type,
-                until_date=until_date,
-                max_occurrences=max_occurrences,
-            )
+            rule = RecurrenceRule.create(
+                    schedule_type=schedule_type,
+                    schedule_expression=schedule_expression,
+                    end_condition_type=end_condition_type,
+                    until_date=until_date,
+                    max_occurrences=max_occurrences,
+                )
+            self.recurrence_rules.append_recurrence_rule(rule)
 
             with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
                 task = tc()

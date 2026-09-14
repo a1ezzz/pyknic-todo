@@ -400,13 +400,6 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             data = self.load_document()
             return [RecurrenceRule(**x) for x in data.get("items", [])]  # type: ignore[no-any-return]
 
-    def find_rule(self, rule_id: str) -> Optional[RecurrenceRule]:
-        with self.lock(exclusive=False):
-            for rule in self.load_recurrence_rules():
-                if rule.id == rule_id:
-                    return rule
-            return None
-
     # --- Writing ---
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
@@ -415,29 +408,13 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             data["items"] = [x.model_dump() for x in rules]
             self.save_document(data)
 
-    def append_recurrence_rule(
-        self,
-        schedule_type: str,
-        schedule_expression: str,
-        end_condition_type: str = "never",
-        until_date: Optional[str] = None,
-        max_occurrences: Optional[int] = None,
-    ) -> RecurrenceRule:
+    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
         # TODO: check that there is no duplicates (the same id)
 
         with self.lock(exclusive=True):
-            rule_obj = RecurrenceRule.create(
-                schedule_type=schedule_type,
-                schedule_expression=schedule_expression,
-                end_condition_type=end_condition_type,
-                until_date=until_date,
-                max_occurrences=max_occurrences,
-            )
-
             rules = self.load_recurrence_rules()
-            rules.append(rule_obj)
+            rules.append(rule)
             self.save_recurrence_rules(rules)
-            return rule_obj
 
 
 class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
