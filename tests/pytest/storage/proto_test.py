@@ -145,9 +145,9 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Validation errors
         with self.assertRaises(ValueError):
-            ts.append_task(title="Bad", status="invalid_status")
+            ts.append_task(title="Bad", status="invalid_status", priority="low")
         with self.assertRaises(ValueError):
-            ts.append_task(title="Bad", priority="invalid_priority")
+            ts.append_task(title="Bad", status="new", priority="invalid_priority")
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"

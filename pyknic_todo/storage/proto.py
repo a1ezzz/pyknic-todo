@@ -30,6 +30,7 @@ import uuid
 from abc import ABCMeta, abstractmethod
 
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso, VALID_STATUSES
+from pyknic_todo.settings import Settings
 
 
 class TaskStorageUpdaterContext(metaclass=ABCMeta):
@@ -84,9 +85,9 @@ class AbstractTaskStorage(metaclass=ABCMeta):
     def append_task(
         self,
         title: str,
+        priority: str,
+        status: str,
         description: str = "",
-        priority: typing.Optional[str] = None,
-        status: typing.Optional[str] = None,
         due_date: typing.Optional[str] = None,
         tags: typing.Optional[list[str]] = None,
         project_id: typing.Optional[str] = None,
@@ -257,6 +258,10 @@ class AbstractStorage(metaclass=ABCMeta):
             comment=comment,
         )
 
+    @abstractmethod
+    def storage_settings(self) -> typing.Optional[Settings]:
+        ... 
+
     def append_task(
         self,
         title: str,
@@ -267,12 +272,14 @@ class AbstractStorage(metaclass=ABCMeta):
         tags: typing.Optional[list[str]] = None,
         project_id: typing.Optional[str] = None,
     ) -> dict[str, typing.Any]:
+        settings = self.storage_settings() or Settings()
+
         with self.lock(exclusive=True):
             task = self.tasks.append_task(
                 title=title,
                 description=description,
-                priority=priority,
-                status=status,
+                priority=priority or settings.default_priority,
+                status=status or settings.default_status,
                 due_date=due_date,
                 tags=tags,
                 project_id=project_id,

@@ -245,6 +245,8 @@ BaseEntityStorage = BaseJsonEntityStorage
 class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     """JSON file-based implementation of TaskStorage."""
 
+    # TODO: make the write row-by-row, it will increase the speed of 'append' operations so as a search
+
     class UpdaterContext(TaskStorageUpdaterContext):
         # TODO: update docstring
 
@@ -348,21 +350,19 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     def append_task(
         self,
         title: str,
+        priority: str,
+        status: str,
         description: str = "",
-        priority: Optional[str] = None,
-        status: Optional[str] = None,
         due_date: Optional[str] = None,
         tags: Optional[list[str]] = None,
         project_id: Optional[str] = None,
     ) -> Task:
         with self.lock(exclusive=True):
-            task_status = status or self.settings.default_status
-            task_priority = priority or self.settings.default_priority
 
-            if task_status not in VALID_STATUSES:
-                raise ValueError(f"Invalid status '{task_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
-            if task_priority not in VALID_PRIORITIES:
-                raise ValueError(f"Invalid priority '{task_priority}'. Valid priorities: {sorted(VALID_PRIORITIES)}")
+            if status not in VALID_STATUSES:
+                raise ValueError(f"Invalid status '{status}'. Valid statuses: {sorted(VALID_STATUSES)}")
+            if priority not in VALID_PRIORITIES:
+                raise ValueError(f"Invalid priority '{priority}'. Valid priorities: {sorted(VALID_PRIORITIES)}")
 
             now = get_utc_now_iso()
             task_id = str(uuid.uuid4())
@@ -371,8 +371,8 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
                 project_id=project_id,
                 title=title.strip(),
                 description=description.strip() if description else "",
-                status=task_status,  # type: ignore[arg-type]
-                priority=task_priority,  # type: ignore[arg-type]
+                status=status,
+                priority=priority,
                 due_date=due_date,
                 tags=tags or [],
                 recurrence_rule_id=None,
@@ -380,8 +380,8 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
                 version=1,
                 created_at=now,
                 updated_at=now,
-                completed_at=now if task_status == "done" else None,
-                deleted_at=now if task_status == "deleted" else None,
+                completed_at=now if status == "done" else None,
+                deleted_at=now if status == "deleted" else None,
             )
 
             tasks = self.load_tasks()
@@ -641,6 +641,9 @@ class JsonStorage(StorageLock, AbstractStorage):
     @property
     def history(self) -> JsonHistoryStorage:
         return self._history_storage
+
+    def storage_settings(self) -> Optional[Settings]:
+        return self.settings
 
     def _ensure_files(self) -> None:
         self.tasks._ensure_file()
