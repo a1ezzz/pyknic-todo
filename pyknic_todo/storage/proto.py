@@ -101,14 +101,14 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def create_rule(
+    def append_rule(
         self,
         schedule_type: str,
         schedule_expression: str,
         end_condition_type: str = "never",
         until_date: typing.Optional[str] = None,
         max_occurrences: typing.Optional[int] = None,
-    ) -> dict[str, typing.Any]:
+    ) -> RecurrenceRule:
         """Create and persist a new recurrence rule."""
         raise NotImplementedError('This method is abstract')
 
@@ -324,7 +324,7 @@ class AbstractStorage(metaclass=ABCMeta):
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
 
-            rule = self.recurrence_rules.create_rule(
+            rule = self.recurrence_rules.append_rule(
                 schedule_type=schedule_type,
                 schedule_expression=schedule_expression,
                 end_condition_type=end_condition_type,
@@ -335,9 +335,9 @@ class AbstractStorage(metaclass=ABCMeta):
             with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
                 task = tc()
 
-                task.recurrence_rule_id = rule["id"]
+                task.recurrence_rule_id = rule.id
                 task.version = int(task.version or 1) + 1
                 task.updated_at = get_utc_now_iso()
 
                 tc.commit()
-                return task.model_dump(), rule  # TODO: ugly!
+                return task.model_dump(), rule.model_dump()  # TODO: ugly!

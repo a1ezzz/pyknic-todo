@@ -419,14 +419,14 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             data["items"] = [x.model_dump() for x in rules]
             self.save_document(data)
 
-    def create_rule(
+    def append_rule(
         self,
         schedule_type: str,
         schedule_expression: str,
         end_condition_type: str = "never",
         until_date: Optional[str] = None,
         max_occurrences: Optional[int] = None,
-    ) -> dict[str, Any]:
+    ) -> RecurrenceRule:
         with self.lock(exclusive=True):
             if schedule_type not in VALID_SCHEDULE_TYPES:
                 raise ValueError(f"Invalid schedule_type '{schedule_type}'. Valid: {sorted(VALID_SCHEDULE_TYPES)}")
@@ -452,7 +452,7 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             rules = self.load_recurrence_rules()
             rules.append(rule_obj)
             self.save_recurrence_rules(rules)
-            return rule_obj.model_dump()
+            return rule_obj
 
 
 class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
