@@ -33,9 +33,11 @@ from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_
 
 
 class TaskStorageUpdaterContext(metaclass=ABCMeta):
-    # TODO: add docstring
+    """This abstract class helps to update a single task and helps to hide implementation routine. """
 
     def __enter__(self) -> typing.Self:
+        """Enter this context."""
+
         return self
 
     def __exit__(
@@ -44,15 +46,18 @@ class TaskStorageUpdaterContext(metaclass=ABCMeta):
         exc_val: typing.Optional[BaseException],
         exc_tb: typing.Optional[types.TracebackType]
     ) -> None:
+        """Exit this context."""
         pass
 
     @abstractmethod
     def __call__(self) -> Task:
+        """Return a task this updater is changing."""
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
     def commit(self) -> None:
-        # TODO: there is a consistency issue -- this context may be saved, but a related one may be missing =(
+        """Save changes for a single task. (May be called multiple times)"""
+        # TODO: there is a consistency issue -- this context may be saved, but a related structures (like 'StateHistoryEvent') may be missing =(
         raise NotImplementedError('This method is abstract')
 
 
@@ -71,7 +76,8 @@ class AbstractTaskStorage(metaclass=ABCMeta):
 
     @abstractmethod
     def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
-        # TODO: add docstring
+        """Return a context that helps to update a single task that was found by the specified criteria
+        """
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
