@@ -17,10 +17,13 @@ from .storage.proto import (
 
 from .storage.storage import (
     StorageFactory,
-    VALID_END_CONDITIONS,
     VALID_PRIORITIES,
-    VALID_SCHEDULE_TYPES,
     VALID_STATUSES,
+)
+
+from .models import (
+    VALID_END_CONDITIONS,
+    VALID_SCHEDULE_TYPES,
 )
 
 

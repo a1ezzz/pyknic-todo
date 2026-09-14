@@ -164,7 +164,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertFalse((rec_dir / "states_history.json").exists())
 
         # Create rule
-        rule = rs.append_rule(
+        rule = rs.append_recurrence_rule(
             schedule_type="rrule",
             schedule_expression="FREQ=DAILY",
             end_condition_type="count",
@@ -197,9 +197,9 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Validation errors
         with self.assertRaises(ValueError):
-            rs.append_rule(schedule_type="invalid", schedule_expression="FREQ=DAILY")
+            rs.append_recurrence_rule(schedule_type="invalid", schedule_expression="FREQ=DAILY")
         with self.assertRaises(ValueError):
-            rs.append_rule(schedule_type="rrule", schedule_expression="FREQ=DAILY", end_condition_type="invalid")
+            rs.append_recurrence_rule(schedule_type="rrule", schedule_expression="FREQ=DAILY", end_condition_type="invalid")
 
     def test_history_storage_isolated(self) -> None:
         hist_dir = Path(self.temp_dir) / "hist_only"

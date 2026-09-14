@@ -67,10 +67,6 @@ SCHEMA_VERSION = DEFAULT_SETTINGS.schema_version
 DEFAULT_DATA_DIR = str(DEFAULT_SETTINGS.data_dir)
 
 
-VALID_SCHEDULE_TYPES = {"rrule", "cron"}
-VALID_END_CONDITIONS = {"never", "until_date", "count"}
-
-
 # =====================================================================
 # JSON Storage Implementation (Hidden / Encapsulated)
 # =====================================================================
@@ -419,7 +415,7 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             data["items"] = [x.model_dump() for x in rules]
             self.save_document(data)
 
-    def append_rule(
+    def append_recurrence_rule(
         self,
         schedule_type: str,
         schedule_expression: str,
@@ -427,26 +423,15 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
         until_date: Optional[str] = None,
         max_occurrences: Optional[int] = None,
     ) -> RecurrenceRule:
-        with self.lock(exclusive=True):
-            if schedule_type not in VALID_SCHEDULE_TYPES:
-                raise ValueError(f"Invalid schedule_type '{schedule_type}'. Valid: {sorted(VALID_SCHEDULE_TYPES)}")
-            if end_condition_type not in VALID_END_CONDITIONS:
-                raise ValueError(
-                    f"Invalid end_condition_type '{end_condition_type}'. Valid: {sorted(VALID_END_CONDITIONS)}"
-                )
+        # TODO: check that there is no duplicates (the same id)
 
-            rule_id = f"rec-rule-{uuid.uuid4().hex[:8]}"
-            now = get_utc_now_iso()
-            rule_obj = RecurrenceRule(
-                id=rule_id,
-                schedule_type=schedule_type,  # type: ignore[arg-type]
-                schedule_expression=schedule_expression.strip(),
-                end_condition=EndCondition(
-                    type=end_condition_type,  # type: ignore[arg-type]
-                    until_date=until_date,
-                    max_occurrences=max_occurrences,
-                ),
-                created_at=now,
+        with self.lock(exclusive=True):
+            rule_obj = RecurrenceRule.create(
+                schedule_type=schedule_type,
+                schedule_expression=schedule_expression,
+                end_condition_type=end_condition_type,
+                until_date=until_date,
+                max_occurrences=max_occurrences,
             )
 
             rules = self.load_recurrence_rules()

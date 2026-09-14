@@ -101,7 +101,7 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def append_rule(
+    def append_recurrence_rule(
         self,
         schedule_type: str,
         schedule_expression: str,
@@ -324,7 +324,7 @@ class AbstractStorage(metaclass=ABCMeta):
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
         with self.lock(exclusive=True):
 
-            rule = self.recurrence_rules.append_rule(
+            rule = self.recurrence_rules.append_recurrence_rule(
                 schedule_type=schedule_type,
                 schedule_expression=schedule_expression,
                 end_condition_type=end_condition_type,

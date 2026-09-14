@@ -38,6 +38,9 @@ VALID_STATUSES = {
     "deleted",
 }
 
+VALID_SCHEDULE_TYPES = {"rrule", "cron"}
+VALID_END_CONDITIONS = {"never", "until_date", "count"}
+
 
 def get_utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -55,6 +58,38 @@ class RecurrenceRule(BaseModel):
     schedule_expression: str
     end_condition: EndCondition
     created_at: str
+
+    @staticmethod
+    def create(
+        schedule_type: str,
+        schedule_expression: str,
+        end_condition_type: str = "never",
+        until_date: Optional[str] = None,
+        max_occurrences: Optional[int] = None,
+    ) -> 'RecurrenceRule':
+
+        # TODO: is this ok, or better to use direct RecurrenceRule() call?
+
+        if schedule_type not in VALID_SCHEDULE_TYPES:
+            raise ValueError(f"Invalid schedule_type '{schedule_type}'. Valid: {sorted(VALID_SCHEDULE_TYPES)}")
+        if end_condition_type not in VALID_END_CONDITIONS:
+            raise ValueError(
+                f"Invalid end_condition_type '{end_condition_type}'. Valid: {sorted(VALID_END_CONDITIONS)}"
+            )
+
+        rule_id = f"rec-rule-{uuid.uuid4().hex[:8]}"
+        now = get_utc_now_iso()
+        return RecurrenceRule(
+            id=rule_id,
+            schedule_type=schedule_type,  # type: ignore[arg-type]
+            schedule_expression=schedule_expression.strip(),
+            end_condition=EndCondition(
+                type=end_condition_type,  # type: ignore[arg-type]
+                until_date=until_date,
+                max_occurrences=max_occurrences,
+            ),
+            created_at=now,
+        )
 
 
 class Task(BaseModel):
