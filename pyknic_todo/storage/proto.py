@@ -82,8 +82,8 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def append_task(self, task: Task) -> Task:
-        # TODO: replace return type by None!
+    def append_task(self, task: Task) -> None:
+        """Append a new task in a storage"""
         raise NotImplementedError('This method is abstract')
 
 
@@ -264,17 +264,17 @@ class AbstractStorage(metaclass=ABCMeta):
         settings = self.storage_settings() or Settings()
 
         with self.lock(exclusive=True):
-            task = self.tasks.append_task(
-                Task.create(
-                    title=title,
-                    description=description,
-                    priority=priority or settings.default_priority,
-                    status=status or settings.default_status,
-                    due_date=due_date,
-                    tags=tags,
-                    project_id=project_id,
-                )
+            task = Task.create(
+                title=title,
+                description=description,
+                priority=priority or settings.default_priority,
+                status=status or settings.default_status,
+                due_date=due_date,
+                tags=tags,
+                project_id=project_id,
             )
+
+            self.tasks.append_task(task)
 
             new_task = task.model_dump()
 

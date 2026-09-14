@@ -432,17 +432,16 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertFalse((task_dir / "states_history.json").exists())
 
         # Create task
-        task = ts.append_task(
-            Task.create(
-                title="Isolated task",
-                description="Details",
-                priority="high",
-                status="pending",
-                tags=["iso"],
-            )
-        ).model_dump()
-        self.assertEqual(task["title"], "Isolated task")
-        self.assertEqual(task["priority"], "high")
+        task = Task.create(
+            title="Isolated task",
+            description="Details",
+            priority="high",
+            status="pending",
+            tags=["iso"],
+        )
+        ts.append_task(task)
+        self.assertEqual(task.title, "Isolated task")
+        self.assertEqual(task.priority, "high")
 
         # Read tasks
         tasks = ts.load_tasks()

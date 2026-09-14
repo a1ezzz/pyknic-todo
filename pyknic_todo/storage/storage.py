@@ -347,12 +347,12 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
         return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
-    def append_task(self, task: Task) -> Task:
+    def append_task(self, task: Task) -> None:
+        # TODO: check that there is no duplicates (the same id)
         with self.lock(exclusive=True):
             tasks = self.load_tasks()
             tasks.append(task)
             self.save_tasks(tasks)
-            return task
 
 
 class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntityStorage):
