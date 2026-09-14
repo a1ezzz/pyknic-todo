@@ -186,7 +186,7 @@ def handle_add(storage: AbstractStorage, args: argparse.Namespace) -> int:
                 if clean and clean not in tags:
                     tags.append(clean)
 
-    task = storage.create_task(
+    task = storage.append_task(
         title=args.title,
         description=args.description,
         priority=args.priority,

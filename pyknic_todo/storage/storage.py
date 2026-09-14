@@ -345,7 +345,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
         return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
-    def create_task(
+    def append_task(
         self,
         title: str,
         description: str = "",
@@ -354,7 +354,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
         due_date: Optional[str] = None,
         tags: Optional[list[str]] = None,
         project_id: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> Task:
         with self.lock(exclusive=True):
             task_status = status or self.settings.default_status
             task_priority = priority or self.settings.default_priority
@@ -387,7 +387,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             tasks = self.load_tasks()
             tasks.append(task_obj)
             self.save_tasks(tasks)
-            return task_obj.model_dump()
+            return task_obj
 
 
 class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntityStorage):
@@ -723,7 +723,7 @@ class StorageFactory:
         return backend_cls(data_dir=data_dir, settings=settings, **kwargs)  # type: ignore[no-any-return]
 
     @classmethod
-    def create_task_storage(
+    def append_task_storage(
         cls,
         storage_type: Optional[str] = None,
         data_dir: Optional[str | Path] = None,

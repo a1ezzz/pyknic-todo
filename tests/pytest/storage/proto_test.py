@@ -32,7 +32,7 @@ from pyknic_todo.storage.storage import (
 
 def _concurrent_create_worker(data_dir_str: str, index: int) -> None:
     storage = Storage(data_dir_str)
-    storage.create_task(title=f"Concurrent task {index}")
+    storage.append_task(title=f"Concurrent task {index}")
 
 
 class TestPyknicTodo(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_change_status(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.create_task(title="Deploy app", status="pending")
+        task = storage.append_task(title="Deploy app", status="pending")
 
         updated = storage.set_task_status(task["id"][:8], "in_progress", comment="Started working")
         self.assertEqual(updated["status"], "in_progress")
@@ -125,13 +125,13 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertFalse((task_dir / "states_history.json").exists())
 
         # Create task
-        task = ts.create_task(
+        task = ts.append_task(
             title="Isolated task",
             description="Details",
             priority="high",
             status="pending",
             tags=["iso"],
-        )
+        ).model_dump()
         self.assertEqual(task["title"], "Isolated task")
         self.assertEqual(task["priority"], "high")
 
@@ -145,9 +145,9 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Validation errors
         with self.assertRaises(ValueError):
-            ts.create_task(title="Bad", status="invalid_status")
+            ts.append_task(title="Bad", status="invalid_status")
         with self.assertRaises(ValueError):
-            ts.create_task(title="Bad", priority="invalid_priority")
+            ts.append_task(title="Bad", priority="invalid_priority")
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"
@@ -261,7 +261,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertIsInstance(st, AbstractStorage)
         self.assertIsInstance(st, JsonStorage)
 
-        ts = StorageFactory.create_task_storage("json", data_dir=self.data_dir)
+        ts = StorageFactory.append_task_storage("json", data_dir=self.data_dir)
         self.assertIsInstance(ts, AbstractTaskStorage)
         self.assertIsInstance(ts, JsonTaskStorage)
 
@@ -277,7 +277,7 @@ class TestPyknicTodo(unittest.TestCase):
         with self.assertRaises(ValueError):
             StorageFactory.create_storage("nonexistent_backend")
         with self.assertRaises(ValueError):
-            StorageFactory.create_task_storage("nonexistent_backend")
+            StorageFactory.append_task_storage("nonexistent_backend")
         with self.assertRaises(ValueError):
             StorageFactory.create_recurrence_storage("nonexistent_backend")
         with self.assertRaises(ValueError):

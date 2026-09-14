@@ -32,7 +32,7 @@ from pyknic_todo.storage.storage import (
 
 def _concurrent_create_worker(data_dir_str: str, index: int) -> None:
     storage = Storage(data_dir_str)
-    storage.create_task(title=f"Concurrent task {index}")
+    storage.append_task(title=f"Concurrent task {index}")
 
 
 class TestPyknicTodo(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_create_task_and_history(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.create_task(
+        task = storage.append_task(
             title="Buy groceries",
             description="Milk, bread, apples",
             priority="high",
@@ -82,7 +82,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_change_status(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.create_task(title="Deploy app", status="pending")
+        task = storage.append_task(title="Deploy app", status="pending")
 
         updated = storage.set_task_status(task["id"][:8], "in_progress", comment="Started working")
         self.assertEqual(updated["status"], "in_progress")
@@ -103,7 +103,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_set_recurrence_schedule(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.create_task(title="Weekly review")
+        task = storage.append_task(title="Weekly review")
 
         updated_task, rule = storage.set_task_recurrence(
             task_id_query=task["id"][:6],
@@ -211,7 +211,7 @@ class TestPyknicTodo(unittest.TestCase):
             default_priority="high",
         )
         storage = Storage(settings=custom_settings)
-        task = storage.create_task(title="Custom task")
+        task = storage.append_task(title="Custom task")
         self.assertEqual(task["priority"], "high")
 
         # Verify client_id and schema_version in tasks.json
@@ -252,7 +252,7 @@ class TestPyknicTodo(unittest.TestCase):
     def test_flock_called_on_create_and_load(self) -> None:
         storage = Storage(self.data_dir)
         with patch("fcntl.flock", wraps=None) as mock_flock:
-            storage.create_task("Test task with flock")
+            storage.append_task("Test task with flock")
             self.assertTrue(mock_flock.called)
 
     def test_flock_nested_reentrancy(self) -> None:
@@ -286,7 +286,7 @@ class TestPyknicTodo(unittest.TestCase):
         with storage1.lock(exclusive=True):
             # Should be able to acquire lock on other_dir without conflict
             with storage2.lock(exclusive=True, blocking=False):
-                storage2.create_task("Independent task")
+                storage2.append_task("Independent task")
 
         tasks2 = storage2.load_tasks()
         self.assertEqual(len(tasks2), 1)
@@ -314,10 +314,10 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_default_hides_completed_and_deleted(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        t_pending = storage.create_task(title="Pending task", status="pending")
-        t_in_progress = storage.create_task(title="In progress task", status="in_progress")
-        storage.create_task(title="Done task", status="done")
-        storage.create_task(title="Deleted task", status="deleted")
+        t_pending = storage.append_task(title="Pending task", status="pending")
+        t_in_progress = storage.append_task(title="In progress task", status="in_progress")
+        storage.append_task(title="Done task", status="done")
+        storage.append_task(title="Deleted task", status="deleted")
 
         f_out = io.StringIO()
         with patch("sys.stdout", f_out):
@@ -342,9 +342,9 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_all_flag_shows_all_tasks(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.create_task(title="Pending task", status="pending")
-        storage.create_task(title="Done task", status="done")
-        storage.create_task(title="Deleted task", status="deleted")
+        storage.append_task(title="Pending task", status="pending")
+        storage.append_task(title="Done task", status="done")
+        storage.append_task(title="Deleted task", status="deleted")
 
         # Test --all
         f_out = io.StringIO()
@@ -375,8 +375,8 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_completed_modes(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.create_task(title="Pending task", status="pending")
-        t_done = storage.create_task(title="Done task", status="done")
+        storage.append_task(title="Pending task", status="pending")
+        t_done = storage.append_task(title="Done task", status="done")
 
         # --completed flag
         f_out = io.StringIO()
@@ -411,8 +411,8 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_status_filter_direct(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.create_task(title="Task 1", status="pending")
-        storage.create_task(title="Task 2", status="done")
+        storage.append_task(title="Task 1", status="pending")
+        storage.append_task(title="Task 2", status="done")
 
         f_out = io.StringIO()
         with patch("sys.stdout", f_out):
@@ -432,13 +432,13 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertFalse((task_dir / "states_history.json").exists())
 
         # Create task
-        task = ts.create_task(
+        task = ts.append_task(
             title="Isolated task",
             description="Details",
             priority="high",
             status="pending",
             tags=["iso"],
-        )
+        ).model_dump()
         self.assertEqual(task["title"], "Isolated task")
         self.assertEqual(task["priority"], "high")
 
@@ -452,9 +452,9 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Validation errors
         with self.assertRaises(ValueError):
-            ts.create_task(title="Bad", status="invalid_status")
+            ts.append_task(title="Bad", status="invalid_status")
         with self.assertRaises(ValueError):
-            ts.create_task(title="Bad", priority="invalid_priority")
+            ts.append_task(title="Bad", priority="invalid_priority")
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"
@@ -568,7 +568,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertIsInstance(st, AbstractStorage)
         self.assertIsInstance(st, JsonStorage)
 
-        ts = StorageFactory.create_task_storage("json", data_dir=self.data_dir)
+        ts = StorageFactory.append_task_storage("json", data_dir=self.data_dir)
         self.assertIsInstance(ts, AbstractTaskStorage)
         self.assertIsInstance(ts, JsonTaskStorage)
 
@@ -584,7 +584,7 @@ class TestPyknicTodo(unittest.TestCase):
         with self.assertRaises(ValueError):
             StorageFactory.create_storage("nonexistent_backend")
         with self.assertRaises(ValueError):
-            StorageFactory.create_task_storage("nonexistent_backend")
+            StorageFactory.append_task_storage("nonexistent_backend")
         with self.assertRaises(ValueError):
             StorageFactory.create_recurrence_storage("nonexistent_backend")
         with self.assertRaises(ValueError):

@@ -81,7 +81,7 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def create_task(
+    def append_task(
         self,
         title: str,
         description: str = "",
@@ -90,8 +90,10 @@ class AbstractTaskStorage(metaclass=ABCMeta):
         due_date: typing.Optional[str] = None,
         tags: typing.Optional[list[str]] = None,
         project_id: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
+    ) -> Task:
         """Create a new task and persist it."""
+        # TODO: replace arguments to a Task object!
+        # TODO: replace return type by None!
         raise NotImplementedError('This method is abstract')
 
 
@@ -255,7 +257,7 @@ class AbstractStorage(metaclass=ABCMeta):
             comment=comment,
         )
 
-    def create_task(
+    def append_task(
         self,
         title: str,
         description: str = "",
@@ -266,7 +268,7 @@ class AbstractStorage(metaclass=ABCMeta):
         project_id: typing.Optional[str] = None,
     ) -> dict[str, typing.Any]:
         with self.lock(exclusive=True):
-            new_task = self.tasks.create_task(
+            task = self.tasks.append_task(
                 title=title,
                 description=description,
                 priority=priority,
@@ -275,6 +277,9 @@ class AbstractStorage(metaclass=ABCMeta):
                 tags=tags,
                 project_id=project_id,
             )
+
+            new_task = task.model_dump()
+
             self.history.record_history_event(
                 task_id=new_task["id"],
                 new_state={"status": new_task["status"]},
