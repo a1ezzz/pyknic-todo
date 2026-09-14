@@ -96,7 +96,7 @@ class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abstractmethod
-    def save_recurrence_rules(self, rules: list[dict[str, typing.Any]]) -> None:
+    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         """Save recurrence rules list."""
         raise NotImplementedError('This method is abstract')
 

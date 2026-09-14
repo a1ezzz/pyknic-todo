@@ -413,10 +413,10 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
 
     # --- Writing ---
 
-    def save_recurrence_rules(self, rules: list[dict[str, Any]]) -> None:
+    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data["items"] = rules
+            data["items"] = [x.model_dump() for x in rules]
             self.save_document(data)
 
     def create_rule(
@@ -448,12 +448,11 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
                 ),
                 created_at=now,
             )
-            rule = rule_obj.model_dump()
 
-            rules = [x.model_dump() for x in self.load_recurrence_rules()]  # TODO: junky
-            rules.append(rule)
+            rules = self.load_recurrence_rules()
+            rules.append(rule_obj)
             self.save_recurrence_rules(rules)
-            return rule
+            return rule_obj.model_dump()
 
 
 class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
