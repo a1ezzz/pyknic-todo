@@ -175,8 +175,8 @@ class AbstractStorage(metaclass=ABCMeta):
     def save_tasks(self, tasks: list[Task]) -> None:
         self.tasks.save_tasks(tasks)
 
-    def load_recurrence_rules(self) -> list[dict[str, typing.Any]]:
-        return [x.model_dump() for x in self.recurrence_rules.load_recurrence_rules()]
+    def load_recurrence_rules(self) -> list[RecurrenceRule]:
+        return self.recurrence_rules.load_recurrence_rules()
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         self.recurrence_rules.save_recurrence_rules(rules)
@@ -184,59 +184,22 @@ class AbstractStorage(metaclass=ABCMeta):
     def load_history(self) -> list[StateHistoryEvent]:
         return self.history.load_history()
 
-    def record_history_event(
-        self,
-        task_id: str,
-        new_state: dict[str, typing.Any],
-        comment: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
-        return self.history.record_history_event(
-            task_id=task_id,
-            new_state=new_state,
-            actor_client_id=self.get_client_id(),
-            comment=comment,
-        )
+    def record_history_event(self, event: StateHistoryEvent) -> None:
+        self.history.record_history_event(event)
 
-    @abstractmethod
-    def storage_settings(self) -> typing.Optional[Settings]:
-        ... 
-
-    def append_task(
-        self,
-        title: str,
-        description: str = "",
-        priority: typing.Optional[str] = None,
-        status: typing.Optional[str] = None,
-        due_date: typing.Optional[str] = None,
-        tags: typing.Optional[list[str]] = None,
-        project_id: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
-        settings = self.storage_settings() or Settings()
+    def append_task(self, task: Task) -> None:
 
         with self.lock(exclusive=True):
-            task = Task.create(
-                title=title,
-                description=description,
-                priority=priority or settings.default_priority,
-                status=status or settings.default_status,
-                due_date=due_date,
-                tags=tags,
-                project_id=project_id,
-            )
-
             self.tasks.append_task(task)
-
-            new_task = task.model_dump()
 
             self.history.record_history_event(
                 StateHistoryEvent.create(
-                    task_id=new_task["id"],
-                    new_state={"status": new_task["status"]},
+                    task_id=task.id,
+                    new_state={"status": task.status},
                     actor_client_id=self.get_client_id(),
                     comment="Created via CLI",
                 )
             )
-            return new_task
 
     def set_task_status(
         self,
@@ -254,9 +217,14 @@ class AbstractStorage(metaclass=ABCMeta):
 
                 now = get_utc_now_iso()
 
+                # TODO: remove the status filed from the Task model!!!
+
                 task.status = new_status  # type: ignore[assignment]
-                task.version = int(task.version or 1) + 1
+                task.version = int(task.version or 1) + 1  # TODO: pretty bad!
                 task.updated_at = now
+
+                # TODO: must be done inside a model!
+
                 if new_status == "done":
                     task.completed_at = now
                 elif task.completed_at:

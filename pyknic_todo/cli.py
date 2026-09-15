@@ -24,6 +24,7 @@ from .storage.storage import (
 from .models import (
     VALID_END_CONDITIONS,
     VALID_SCHEDULE_TYPES,
+    Task
 )
 
 
@@ -180,7 +181,7 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     return parser
 
 
-def handle_add(storage: AbstractStorage, args: argparse.Namespace) -> int:
+def handle_add(settings: Settings, storage: AbstractStorage, args: argparse.Namespace) -> int:
     tags: list[str] = []
     if args.tags:
         for t in args.tags:
@@ -189,16 +190,18 @@ def handle_add(storage: AbstractStorage, args: argparse.Namespace) -> int:
                 if clean and clean not in tags:
                     tags.append(clean)
 
-    task = storage.append_task(
+    task = Task.create(
         title=args.title,
         description=args.description,
-        priority=args.priority,
-        status=args.status,
+        priority=args.priority or settings.default_priority,
+        status=args.status or settings.default_status,
         due_date=args.due_date,
         tags=tags,
         project_id=args.project_id,
     )
-    print(f"Task created: [{task['status']}] {task['title']} (ID: {task['id']})")
+
+    storage.append_task(task)
+    print(f"Task created: [{task.status}] {task.title} (ID: {task.id})")
     return 0
 
 
@@ -323,7 +326,7 @@ def main(
 
     try:
         if args.command == "add":
-            return handle_add(storage, args)
+            return handle_add(settings, storage, args)
         elif args.command == "status":
             return handle_status(storage, args)
         elif args.command == "done":

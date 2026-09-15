@@ -32,7 +32,7 @@ from pyknic_todo.storage.storage import (
 
 def _concurrent_create_worker(data_dir_str: str, index: int) -> None:
     storage = Storage(data_dir_str)
-    storage.append_task(title=f"Concurrent task {index}")
+    storage.append_task(Task.create(title=f"Concurrent task {index}", priority="medium", status="pending"))
 
 
 class TestPyknicTodo(unittest.TestCase):
@@ -45,23 +45,24 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_create_task_and_history(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.append_task(
+        task = Task.create(
             title="Buy groceries",
             description="Milk, bread, apples",
             priority="high",
             status="pending",
             tags=["home", "food"],
         )
+        storage.append_task(task)
 
-        self.assertEqual(task["title"], "Buy groceries")
-        self.assertEqual(task["description"], "Milk, bread, apples")
-        self.assertEqual(task["priority"], "high")
-        self.assertEqual(task["status"], "pending")
-        self.assertEqual(task["tags"], ["home", "food"])
-        self.assertEqual(task["version"], 1)
-        self.assertIsNone(task["recurrence_rule_id"])
-        self.assertIsNotNone(task["created_at"])
-        self.assertIsNotNone(task["updated_at"])
+        self.assertEqual(task.title, "Buy groceries")
+        self.assertEqual(task.description, "Milk, bread, apples")
+        self.assertEqual(task.priority, "high")
+        self.assertEqual(task.status, "pending")
+        self.assertEqual(task.tags, ["home", "food"])
+        self.assertEqual(task.version, 1)
+        self.assertIsNone(task.recurrence_rule_id)
+        self.assertIsNotNone(task.created_at)
+        self.assertIsNotNone(task.updated_at)
 
         # Check tasks.json structure
         with open(self.data_dir / "tasks.json", "r", encoding="utf-8") as f:
@@ -69,7 +70,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(tasks_data["$schema_version"], "1.0.0")
         self.assertTrue(tasks_data["client_id"].startswith("cli-"))
         self.assertEqual(len(tasks_data["items"]), 1)
-        self.assertEqual(tasks_data["items"][0]["id"], task["id"])
+        self.assertEqual(tasks_data["items"][0]["id"], task.id)
 
         # Check states_history.json
         with open(self.data_dir / "states_history.json", "r", encoding="utf-8") as f:
@@ -77,19 +78,20 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(history_data["$schema_version"], "1.0.0")
         self.assertEqual(len(history_data["events"]), 1)
         event = history_data["events"][0]
-        self.assertEqual(event["task_id"], task["id"])
+        self.assertEqual(event["task_id"], task.id)
         self.assertEqual(event["new_state"], {"status": "pending"})
 
     def test_change_status(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.append_task(title="Deploy app", status="pending")
+        task = Task.create(title="Deploy app", status="pending", priority="medium")
+        storage.append_task(task)
 
-        updated = storage.set_task_status(task["id"][:8], "in_progress", comment="Started working")
+        updated = storage.set_task_status(task.id[:8], "in_progress", comment="Started working")
         self.assertEqual(updated["status"], "in_progress")
         self.assertEqual(updated["version"], 2)
         self.assertIsNone(updated["completed_at"])
 
-        done_task = storage.set_task_status(task["id"], "done")
+        done_task = storage.set_task_status(task.id, "done")
         self.assertEqual(done_task["status"], "done")
         self.assertEqual(done_task["version"], 3)
         self.assertIsNotNone(done_task["completed_at"])
@@ -103,10 +105,11 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_set_recurrence_schedule(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.append_task(title="Weekly review")
+        task = Task.create(title="Weekly review", priority="medium", status="pending")
+        storage.append_task(task)
 
         updated_task, rule = storage.set_task_recurrence(
-            task_id_query=task["id"][:6],
+            task_id_query=task.id[:6],
             schedule_type="rrule",
             schedule_expression="FREQ=WEEKLY;BYDAY=MO",
             end_condition_type="count",
@@ -164,8 +167,8 @@ class TestPyknicTodo(unittest.TestCase):
 
         rules = Storage(self.data_dir).load_recurrence_rules()
         self.assertEqual(len(rules), 1)
-        self.assertEqual(rules[0]["schedule_type"], "cron")
-        self.assertEqual(rules[0]["schedule_expression"], "0 9 * * 1")
+        self.assertEqual(rules[0].schedule_type, "cron")
+        self.assertEqual(rules[0].schedule_expression, "0 9 * * 1")
 
         # 4. Mark done via shorthand
         code = main([data_arg, "done", task_id[:8]])
@@ -208,11 +211,11 @@ class TestPyknicTodo(unittest.TestCase):
             data_dir=self.data_dir,
             schema_version="2.0.0",
             client_id_prefix="worker",
-            default_priority="high",
         )
         storage = Storage(settings=custom_settings)
-        task = storage.append_task(title="Custom task")
-        self.assertEqual(task["priority"], "high")
+        task = Task.create(title="Custom task", priority="high", status="pending")
+        storage.append_task(task)
+        self.assertEqual(task.priority, "high")
 
         # Verify client_id and schema_version in tasks.json
         with open(self.data_dir / "tasks.json", "r", encoding="utf-8") as f:
@@ -252,7 +255,7 @@ class TestPyknicTodo(unittest.TestCase):
     def test_flock_called_on_create_and_load(self) -> None:
         storage = Storage(self.data_dir)
         with patch("fcntl.flock", wraps=None) as mock_flock:
-            storage.append_task("Test task with flock")
+            storage.append_task(Task.create("Test task with flock", priority="medium", status="pending"))
             self.assertTrue(mock_flock.called)
 
     def test_flock_nested_reentrancy(self) -> None:
@@ -286,7 +289,7 @@ class TestPyknicTodo(unittest.TestCase):
         with storage1.lock(exclusive=True):
             # Should be able to acquire lock on other_dir without conflict
             with storage2.lock(exclusive=True, blocking=False):
-                storage2.append_task("Independent task")
+                storage2.append_task(Task.create("Independent task", priority="medium", status="pending"))
 
         tasks2 = storage2.load_tasks()
         self.assertEqual(len(tasks2), 1)
@@ -314,10 +317,12 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_default_hides_completed_and_deleted(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        t_pending = storage.append_task(title="Pending task", status="pending")
-        t_in_progress = storage.append_task(title="In progress task", status="in_progress")
-        storage.append_task(title="Done task", status="done")
-        storage.append_task(title="Deleted task", status="deleted")
+        t_pending = Task.create(title="Pending task", status="pending", priority="medium")
+        t_in_progress = Task.create(title="In progress task", status="in_progress", priority="medium")
+        storage.append_task(t_pending)
+        storage.append_task(t_in_progress)
+        storage.append_task(Task.create(title="Done task", status="done", priority="medium"))
+        storage.append_task(Task.create(title="Deleted task", status="deleted", priority="medium"))
 
         f_out = io.StringIO()
         with patch("sys.stdout", f_out):
@@ -326,7 +331,7 @@ class TestPyknicTodo(unittest.TestCase):
         listed = json.loads(f_out.getvalue())
         self.assertEqual(len(listed), 2)
         listed_ids = {t["id"] for t in listed}
-        self.assertEqual(listed_ids, {t_pending["id"], t_in_progress["id"]})
+        self.assertEqual(listed_ids, {t_pending.id, t_in_progress.id})
 
         # Table output check
         f_table = io.StringIO()
@@ -342,9 +347,9 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_all_flag_shows_all_tasks(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.append_task(title="Pending task", status="pending")
-        storage.append_task(title="Done task", status="done")
-        storage.append_task(title="Deleted task", status="deleted")
+        storage.append_task(Task.create(title="Pending task", status="pending", priority="medium"))
+        storage.append_task(Task.create(title="Done task", status="done", priority="medium"))
+        storage.append_task(Task.create(title="Deleted task", status="deleted", priority="medium"))
 
         # Test --all
         f_out = io.StringIO()
@@ -375,8 +380,9 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_completed_modes(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.append_task(title="Pending task", status="pending")
-        t_done = storage.append_task(title="Done task", status="done")
+        storage.append_task(Task.create(title="Pending task", status="pending", priority="medium"))
+        t_done = Task.create(title="Done task", status="done", priority="medium")
+        storage.append_task(t_done)
 
         # --completed flag
         f_out = io.StringIO()
@@ -385,7 +391,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(code, 0)
         listed = json.loads(f_out.getvalue())
         self.assertEqual(len(listed), 1)
-        self.assertEqual(listed[0]["id"], t_done["id"])
+        self.assertEqual(listed[0]["id"], t_done.id)
 
         # -c shorthand
         f_short = io.StringIO()
@@ -411,8 +417,8 @@ class TestPyknicTodo(unittest.TestCase):
     def test_list_status_filter_direct(self) -> None:
         data_arg = f"--data-dir={self.data_dir}"
         storage = Storage(self.data_dir)
-        storage.append_task(title="Task 1", status="pending")
-        storage.append_task(title="Task 2", status="done")
+        storage.append_task(Task.create(title="Task 1", status="pending", priority="medium"))
+        storage.append_task(Task.create(title="Task 2", status="done", priority="medium"))
 
         f_out = io.StringIO()
         with patch("sys.stdout", f_out):

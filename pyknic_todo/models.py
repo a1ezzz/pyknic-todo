@@ -93,6 +93,15 @@ class RecurrenceRule(BaseModel):
 
 
 class Task(BaseModel):
+
+    # TODO: set status and priproties defaults the same as Settings defaults are
+
+    # TODO: a task should have a status, its status must be stored in a history only!
+
+    # TODO: remove parent_recurrence_task_id!
+
+    # TODO: replace project_id with project!
+
     id: str
     project_id: Optional[str] = None
     title: str

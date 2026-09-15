@@ -551,9 +551,6 @@ class JsonStorage(StorageLock, AbstractStorage):
     def history(self) -> JsonHistoryStorage:
         return self._history_storage
 
-    def storage_settings(self) -> Optional[Settings]:
-        return self.settings
-
     def _ensure_files(self) -> None:
         self.tasks._ensure_file()
         self.recurrence_rules._ensure_file()

@@ -45,14 +45,15 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_change_status(self) -> None:
         storage = Storage(self.data_dir)
-        task = storage.append_task(title="Deploy app", status="pending")
+        task = Task.create(title="Deploy app", status="pending", priority="medium")
+        storage.append_task(task)
 
-        updated = storage.set_task_status(task["id"][:8], "in_progress", comment="Started working")
+        updated = storage.set_task_status(task.id[:8], "in_progress", comment="Started working")
         self.assertEqual(updated["status"], "in_progress")
         self.assertEqual(updated["version"], 2)
         self.assertIsNone(updated["completed_at"])
 
-        done_task = storage.set_task_status(task["id"], "done")
+        done_task = storage.set_task_status(task.id, "done")
         self.assertEqual(done_task["status"], "done")
         self.assertEqual(done_task["version"], 3)
         self.assertIsNotNone(done_task["completed_at"])
@@ -102,8 +103,8 @@ class TestPyknicTodo(unittest.TestCase):
 
         rules = Storage(self.data_dir).load_recurrence_rules()
         self.assertEqual(len(rules), 1)
-        self.assertEqual(rules[0]["schedule_type"], "cron")
-        self.assertEqual(rules[0]["schedule_expression"], "0 9 * * 1")
+        self.assertEqual(rules[0].schedule_type, "cron")
+        self.assertEqual(rules[0].schedule_expression, "0 9 * * 1")
 
         # 4. Mark done via shorthand
         code = main([data_arg, "done", task_id[:8]])
