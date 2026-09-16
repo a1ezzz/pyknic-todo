@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         default="medium",
         description="Default priority for new tasks",
     )
-    default_status: str = Field(
+    default_status: str = Field(  # TODO: remove this!
         default="pending",
         description="Default status for new tasks",
     )

@@ -4,13 +4,6 @@
 
 from .settings import Settings
 
-from .storage.proto import (
-    AbstractHistoryStorage,
-    AbstractRecurrenceRuleStorage,
-    AbstractStorage,
-    AbstractTaskStorage,
-)
-
 from .storage.storage import (
     BaseEntityStorage,
     BaseJsonEntityStorage,

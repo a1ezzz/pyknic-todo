@@ -19,261 +19,104 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with pyknic_todo.  If not, see <http://www.gnu.org/licenses/>.
 
-# TODO: document the code
-# TODO: write tests for the code
-# TODO: refactor this
-
-import types
+import abc
 import typing
 import uuid
 
-from abc import ABCMeta, abstractmethod
-
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, get_utc_now_iso, VALID_STATUSES
-from pyknic_todo.settings import Settings
+from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStatus
 
 
-class TaskStorageUpdaterContext(metaclass=ABCMeta):
-    """This abstract class helps to update a single task and helps to hide implementation routine. """
-
-    def __enter__(self) -> typing.Self:
-        """Enter this context."""
-
-        return self
-
-    def __exit__(
-        self,
-        exc_type: typing.Optional[typing.Type[BaseException]],
-        exc_val: typing.Optional[BaseException],
-        exc_tb: typing.Optional[types.TracebackType]
-    ) -> None:
-        """Exit this context."""
-        pass
-
-    @abstractmethod
-    def __call__(self) -> Task:
-        """Return a task this updater is changing."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def commit(self) -> None:
-        """Save changes for a single task. (May be called multiple times)"""
-        # TODO: there is a consistency issue -- this context may be saved, but a related structures (like 'StateHistoryEvent') may be missing =(
-        raise NotImplementedError('This method is abstract')
-
-
-class AbstractTaskStorage(metaclass=ABCMeta):
-    """Abstract interface for task storage backends."""
-    # TODO: is there should be some clean-up method (deleted tasks removing)? -- please note synchronization!
-
-    @abstractmethod
-    def load_tasks(self) -> list[Task]:
-        """Load all tasks as dictionaries."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def save_tasks(self, tasks: list[Task]) -> None:
-        """Save tasks list."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
-        """Return a context that helps to update a single task that was found by the specified criteria
-        """
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def append_task(self, task: Task) -> None:
-        """Append a new task in a storage"""
-        raise NotImplementedError('This method is abstract')
-
-
-class AbstractRecurrenceRuleStorage(metaclass=ABCMeta):
-    """Abstract interface for recurrence rule storage backends."""
-    # TODO: is the "updater_context" method require?
-    # TODO: is there should be some clean-up method for orphaned rules (rules without tasks)?
-
-    @abstractmethod
-    def load_recurrence_rules(self) -> list[RecurrenceRule]:
-        """Load all recurrence rules as dictionaries."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        """Save recurrence rules list."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
-        """Create and persist a new recurrence rule."""
-        raise NotImplementedError('This method is abstract')
-
-
-class AbstractHistoryStorage(metaclass=ABCMeta):
-    """Abstract interface for state history storage backends."""
-    # TODO: is there should be some clean-up method for orphaned events (events without tasks)?
-
-    @abstractmethod
-    def load_history(self) -> list[StateHistoryEvent]:
-        """Load all history events as dictionaries."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def save_history(self, events: list[StateHistoryEvent]) -> None:
-        """Save history events list."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def record_history_event(self, event: StateHistoryEvent) -> None:
-        """Record a state change event."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
-    def find_events_for_task(self, task_id: str) -> list[StateHistoryEvent]:
-        """Find history events for a given task ID."""
-        raise NotImplementedError('This method is abstract')
-
-
-class AbstractStorage(metaclass=ABCMeta):
+class ToDoStorageProto(metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
 
-    @property
-    @abstractmethod
-    def tasks(self) -> AbstractTaskStorage:
-        """Task storage component."""
-        raise NotImplementedError('This method is abstract')
-
-    @property
-    @abstractmethod
-    def recurrence_rules(self) -> AbstractRecurrenceRuleStorage:
-        """Recurrence rule storage component."""
-        raise NotImplementedError('This method is abstract')
-
-    @property
-    @abstractmethod
-    def history(self) -> AbstractHistoryStorage:
-        """History storage component."""
-        raise NotImplementedError('This method is abstract')
-
-    @abstractmethod
+    @abc.abstractmethod
     def lock(
         self,
         exclusive: bool = True,
         blocking: bool = True,
     ) -> typing.ContextManager[None]:
-        """Acquire synchronization lock for storage operations."""
+        """Acquire synchronization lock for storage operations.
+
+        :param exclusive: define a mode of a lock -- where the exclusive or shared mode should be used
+        :param blocking: if True then this call will wait for a lock endlessly, otherwise (if it is False) the
+        code will acuire the lock or raise OSError immediately
+        """
+        # TODO: think about reasonable timeout for a blocking mode on
         raise NotImplementedError('This method is abstract')
 
-    # Common coordination methods
-    def get_client_id(self) -> str:
-        # TODO: it must be persistent!
-        return str(uuid.uuid4())
-
+    @abc.abstractmethod
     def load_tasks(self) -> list[Task]:
-        return self.tasks.load_tasks()
+        """Load all tasks as dictionaries."""
+        raise NotImplementedError('This method is abstract')
 
     def save_tasks(self, tasks: list[Task]) -> None:
-        self.tasks.save_tasks(tasks)
+        """Replace tasks and save them.
+
+        :param tasks: a new set of tasks (previous tasks will be discared)
+        """
+        # TODO: pretty rough method. Should be replaced in a future with more specific functions
+        raise NotImplementedError('This method is abstract')
 
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
-        return self.recurrence_rules.load_recurrence_rules()
+        """Load all recurrence rules as dictionaries."""
+        raise NotImplementedError('This method is abstract')
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        self.recurrence_rules.save_recurrence_rules(rules)
+        """Replace recurrence rules and save them.
+
+        :param rules: a new set of rules (previous rules will be discared)
+        """
+        # TODO: pretty rough method. Should be replaced in a future with more specific functions
+        raise NotImplementedError('This method is abstract')
 
     def load_history(self) -> list[StateHistoryEvent]:
-        return self.history.load_history()
+        """Load all history events as dictionaries."""
+        raise NotImplementedError('This method is abstract')
 
     def record_history_event(self, event: StateHistoryEvent) -> None:
-        self.history.record_history_event(event)
+        """Record a state change event.
+
+        :param event: a new event to save
+        """
+        raise NotImplementedError('This method is abstract')
 
     def append_task(self, task: Task) -> None:
+        """Append a new task. A new state ('new') for this task will be kept in a history automatically.
 
-        with self.lock(exclusive=True):
-            self.tasks.append_task(task)
+        :param task: a task to save
+        """
+        raise NotImplementedError('This method is abstract')
 
-            self.history.record_history_event(
-                StateHistoryEvent.create(
-                    task_id=task.id,
-                    new_state={"status": task.status},
-                    actor_client_id=self.get_client_id(),
-                    comment="Created via CLI",
-                )
-            )
+    def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
+        """Return latest task status
+
+        :param task_id_query: a task identifier (a partial uuid submittion is supported)
+        """
+        raise NotImplementedError('This method is abstract')
 
     def set_task_status(
         self,
-        task_id_query: str,
-        new_status: str,
+        task_id_query: typing.Union[uuid.UUID, str],
+        new_status: TaskStatus,
         comment: typing.Optional[str] = None,
-    ) -> dict[str, typing.Any]:
-        with self.lock(exclusive=True):
+    ) -> Task:
+        """Update task status.
 
-            if new_status not in VALID_STATUSES:
-                raise ValueError(f"Invalid status '{new_status}'. Valid statuses: {sorted(VALID_STATUSES)}")
+        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
+        :param new_status: a status to set
 
-            with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
-                task = tc()
-
-                now = get_utc_now_iso()
-
-                # TODO: remove the status filed from the Task model!!!
-
-                task.status = new_status  # type: ignore[assignment]
-                task.version = int(task.version or 1) + 1  # TODO: pretty bad!
-                task.updated_at = now
-
-                # TODO: must be done inside a model!
-
-                if new_status == "done":
-                    task.completed_at = now
-                elif task.completed_at:
-                    task.completed_at = None
-
-                if new_status == "deleted":
-                    task.deleted_at = now
-                elif task.deleted_at:
-                    task.deleted_at = None
-
-                tc.commit()
-
-                self.history.record_history_event(
-                    StateHistoryEvent.create(
-                        task_id=task.id,
-                        new_state={"status": new_status},
-                        actor_client_id=self.get_client_id(),
-                        comment=comment or f"Status changed to {new_status} via CLI",
-                    )
-                )
-
-                return task.model_dump()
+        :return: a task which status was updated
+        """
+        raise NotImplementedError('This method is abstract')
 
     def set_task_recurrence(
         self,
-        task_id_query: str,
-        schedule_type: str,
-        schedule_expression: str,
-        end_condition_type: str = "never",
-        until_date: typing.Optional[str] = None,
-        max_occurrences: typing.Optional[int] = None,
-    ) -> tuple[dict[str, typing.Any], dict[str, typing.Any]]:
-        with self.lock(exclusive=True):
+        task_id_query: typing.Union[uuid.UUID, str],
+        rule: typing.Optional[RecurrenceRule] = None
+    ) -> Task:
+        """Set recurrence rule for the task.
 
-            rule = RecurrenceRule.create(
-                    schedule_type=schedule_type,
-                    schedule_expression=schedule_expression,
-                    end_condition_type=end_condition_type,
-                    until_date=until_date,
-                    max_occurrences=max_occurrences,
-                )
-            self.recurrence_rules.append_recurrence_rule(rule)
-
-            with self.tasks.updater_context(task_id_query, query_full_match=False) as tc:
-                task = tc()
-
-                task.recurrence_rule_id = rule.id
-                task.version = int(task.version or 1) + 1
-                task.updated_at = get_utc_now_iso()
-
-                tc.commit()
-                return task.model_dump(), rule.model_dump()  # TODO: ugly!
+        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
+        :param rule: a new recurrence rule for a task. If None, then recurrence will be disabled.
+        """
+        raise NotImplementedError('This method is abstract')

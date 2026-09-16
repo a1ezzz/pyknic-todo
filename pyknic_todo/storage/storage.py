@@ -35,25 +35,21 @@ import json
 import os
 import threading
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Union
 
 from pyknic_todo.models import (
-    EndCondition,
     RecurrenceRule,
     RecurrenceRuleDocument,
     StateHistoryDocument,
     StateHistoryEvent,
     Task,
-    TaskDocument,
-    get_utc_now_iso,
-    VALID_STATUSES,
-    VALID_PRIORITIES
+    TaskStatus,
+    TaskDocument
 )
 from pyknic_todo.settings import Settings
 
-from .proto import (
+from .plain import (
     AbstractTaskStorage,
     AbstractRecurrenceRuleStorage,
     AbstractHistoryStorage,
@@ -246,20 +242,21 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     class UpdaterContext(TaskStorageUpdaterContext):
         # TODO: update docstring
 
-        def __init__(self, storage: AbstractTaskStorage, id_query: str, query_full_match: bool = True):
+        def __init__(self, storage: AbstractTaskStorage, id_query: Union[uuid.UUID, str], query_full_match: bool = True):
             TaskStorageUpdaterContext.__init__(self)
             self.__storage = storage
             self.__all_tasks = self.__storage.load_tasks()
             self.__task = self.__find_task(id_query, full_match=query_full_match)
 
-        def __find_task(self, id_query: str, full_match: bool = False) -> Task:
+        def __find_task(self, id_query: Union[uuid.UUID, str], full_match: bool = False) -> Task:
             # TODO: please note! there is a code that relay on exceptions int this code
+            # TODO: change type of the id_query to the Task, UUID or str
 
             partial_match = []
             fully_matched = None
             for t in self.__all_tasks:
-                if t.id.startswith(id_query):
-                    if t.id == id_query:
+                if str(t.id).startswith(str(id_query)):  # TODO: is it fast enough? Converting to str doesn't look good
+                    if str(t.id) == str(id_query):
                         if fully_matched is not None:
                             raise ValueError(f"Ambiguous task ID prefix '{id_query}'")
                         fully_matched = t
@@ -311,7 +308,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
         return {
             "$schema_version": self.settings.schema_version,
             "client_id": cid,
-            "updated_at": get_utc_now_iso(),
+            "updated_at": "1",  # todo_models_now(),  # TODO: fix!
             "items": [],
         }
 
@@ -336,11 +333,11 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
     def save_tasks(self, tasks: list[Task]) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data["items"] = [x.model_dump() for x in tasks]
-            data["updated_at"] = get_utc_now_iso()
+            data["items"] = [x.model_dump(mode='json') for x in tasks]  # TODO: better to serialize at once
+            data["updated_at"] = "1"  # todo_models_now # TODO: update!
             self.save_document(data)
 
-    def updater_context(self, id_query: str, query_full_match: bool = True) -> TaskStorageUpdaterContext:
+    def updater_context(self, id_query: Union[uuid.UUID, str], query_full_match: bool = True) -> TaskStorageUpdaterContext:
         return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
     def append_task(self, task: Task) -> None:
@@ -398,14 +395,14 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
         with self.lock(exclusive=False):
             data = self.load_document()
-            return [RecurrenceRule(**x) for x in data.get("items", [])]  # type: ignore[no-any-return]
+            return [RecurrenceRule(**x) for x in data.get("items", [])]
 
     # --- Writing ---
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data["items"] = [x.model_dump() for x in rules]
+            data["items"] = [x.model_dump(mode="json") for x in rules]  # TODO: do better!
             self.save_document(data)
 
     def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
@@ -466,9 +463,17 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
             data = self.load_document()
             return [StateHistoryEvent(**e) for e in data.get("events", [])]
 
-    def find_events_for_task(self, task_id: str) -> list[StateHistoryEvent]:
+    def find_events_for_task(self, task_id_query: Union[uuid.UUID, str]) -> list[StateHistoryEvent]:
         with self.lock(exclusive=False):
-            return [e for e in self.load_history() if e.task_id == task_id]
+            return [e for e in self.load_history() if e.task_id == task_id_query]
+
+    def task_latest_status(self, task_id_query: Union[uuid.UUID, str]) -> TaskStatus:
+        # TODO: real implementation must be faster!
+        events = self.find_events_for_task(task_id_query)
+        if events:
+            return (events[-1].next_state)
+
+        raise ValueError(f'Task id "{task_id_query}" was not found')
 
     # --- Writing ---
 
@@ -481,7 +486,7 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
     def record_history_event(self, event: StateHistoryEvent) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
-            data.setdefault("events", []).append(event.model_dump())
+            data.setdefault("events", []).append(event.model_dump(mode='json'))  # TODO: better to serialize at once
             self.save_document(data)
 
 
@@ -540,21 +545,21 @@ class JsonStorage(StorageLock, AbstractStorage):
         self.history_storage = self._history_storage
 
     @property
-    def tasks(self) -> JsonTaskStorage:
+    def _tasks(self) -> JsonTaskStorage:
         return self._task_storage
 
     @property
-    def recurrence_rules(self) -> JsonRecurrenceRuleStorage:
+    def _recurrence_rules(self) -> JsonRecurrenceRuleStorage:
         return self._recurrence_storage
 
     @property
-    def history(self) -> JsonHistoryStorage:
+    def _history(self) -> JsonHistoryStorage:
         return self._history_storage
 
     def _ensure_files(self) -> None:
-        self.tasks._ensure_file()
-        self.recurrence_rules._ensure_file()
-        self.history._ensure_file()
+        self._tasks._ensure_file()
+        self._recurrence_rules._ensure_file()
+        self._history._ensure_file()
 
     def _read_json(self, path: Path) -> dict[str, Any]:
         with self.lock(exclusive=False):

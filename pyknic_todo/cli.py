@@ -12,19 +12,21 @@ from typing import Any, Optional, Sequence
 
 from .settings import Settings
 from .storage.proto import (
-    AbstractStorage,
+    ToDoStorageProto,
 )
 
 from .storage.storage import (
     StorageFactory,
-    VALID_PRIORITIES,
-    VALID_STATUSES,
 )
 
 from .models import (
-    VALID_END_CONDITIONS,
-    VALID_SCHEDULE_TYPES,
-    Task
+    RecurrenceEndCondtionType,
+    RecurrenceScheduleType,
+    Task,
+    TaskPriority,
+    TaskStatus,
+    RecurrenceRule,
+    EndCondition
 )
 
 
@@ -59,14 +61,16 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
         "-p",
         "--priority",
         default=settings.default_priority,
-        choices=sorted(VALID_PRIORITIES),
+        choices=sorted([
+            x.value for x in TaskPriority
+        ]),
         help=f"Task priority (default: {settings.default_priority})",
     )
     add_parser.add_argument(
         "-s",
         "--status",
         default=settings.default_status,
-        choices=sorted(VALID_STATUSES),
+        choices=sorted([x.value for x in TaskStatus]),
         help=f"Initial task status (default: {settings.default_status})",
     )
     add_parser.add_argument("--due", "--due-date", dest="due_date", default=None, help="Due date (ISO format)")
@@ -77,14 +81,14 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
         action="append",
         help="Tag for task (can be specified multiple times or comma-separated)",
     )
-    add_parser.add_argument("--project", dest="project_id", default=None, help="Project ID")
+    add_parser.add_argument("--project", dest="project", default=None, help="Project name")
 
     # status command
     status_parser = subparsers.add_parser("status", help="Change status of a task")
     status_parser.add_argument("task_id", help="Task ID or ID prefix")
     status_parser.add_argument(
         "new_status",
-        choices=sorted(VALID_STATUSES),
+        choices=sorted([x.value for x in TaskStatus]),
         help="New status for the task",
     )
     status_parser.add_argument("-m", "--comment", default=None, help="Optional comment for state transition")
@@ -108,13 +112,13 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
         "--type",
         dest="schedule_type",
         default="rrule",
-        choices=sorted(VALID_SCHEDULE_TYPES),
+        choices=sorted([x.value for x in RecurrenceScheduleType]),
         help="Schedule type: 'rrule' or 'cron' (default: rrule)",
     )
     repeat_parser.add_argument(
         "--end-type",
         default="never",
-        choices=sorted(VALID_END_CONDITIONS),
+        choices=sorted([x.value for x in RecurrenceEndCondtionType]),
         help="Recurrence end condition type (default: never)",
     )
     repeat_parser.add_argument("--until", dest="until_date", default=None, help="Until date (ISO format)")
@@ -160,7 +164,7 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     list_parser.add_argument(
         "-s",
         "--status",
-        choices=sorted(VALID_STATUSES),
+        choices=sorted([x.value for x in TaskStatus]),
         default=None,
         help="Filter tasks by status",
     )
@@ -181,7 +185,7 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     return parser
 
 
-def handle_add(settings: Settings, storage: AbstractStorage, args: argparse.Namespace) -> int:
+def handle_add(settings: Settings, storage: ToDoStorageProto, args: argparse.Namespace) -> int:
     tags: list[str] = []
     if args.tags:
         for t in args.tags:
@@ -190,53 +194,60 @@ def handle_add(settings: Settings, storage: AbstractStorage, args: argparse.Name
                 if clean and clean not in tags:
                     tags.append(clean)
 
-    task = Task.create(
+    task = Task(
         title=args.title,
         description=args.description,
-        priority=args.priority or settings.default_priority,
-        status=args.status or settings.default_status,
+        priority=TaskPriority(args.priority or settings.default_priority),
         due_date=args.due_date,
         tags=tags,
-        project_id=args.project_id,
+        project=args.project,
     )
 
     storage.append_task(task)
-    print(f"Task created: [{task.status}] {task.title} (ID: {task.id})")
+    task_status = storage.task_status(task.id)
+    print(f"Task created: [{task_status}] {task.title} (ID: {task.id})")
     return 0
 
 
-def handle_status(storage: AbstractStorage, args: argparse.Namespace) -> int:
-    task = storage.set_task_status(
+def handle_status(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
+    storage.set_task_status(
         task_id_query=args.task_id,
-        new_status=args.new_status,
+        new_status=getattr(TaskStatus, args.new_status),  # TODO: handle invalid status
         comment=args.comment,
     )
-    print(f"Task {task['id']} status updated to '{task['status']}'")
+    print(f"Task {args.task_id} status updated to '{args.new_status}'")
     return 0
 
 
-def handle_done(storage: AbstractStorage, args: argparse.Namespace) -> int:
+def handle_done(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
     task = storage.set_task_status(
         task_id_query=args.task_id,
-        new_status="done",
+        new_status=TaskStatus.done,
         comment=args.comment,
     )
-    print(f"Task {task['id']} marked as done")
+    print(f"Task {task.id} marked as done")
     return 0
 
 
-def handle_repeat(storage: AbstractStorage, args: argparse.Namespace) -> int:
-    task, rule = storage.set_task_recurrence(
-        task_id_query=args.task_id,
+def handle_repeat(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
+
+    rule = RecurrenceRule(
         schedule_type=args.schedule_type,
         schedule_expression=args.expression,
-        end_condition_type=args.end_type,
-        until_date=args.until_date,
-        max_occurrences=args.max_occurrences,
+        end_condition=EndCondition(
+            condition_type=args.end_type,
+            until_date=args.until_date,
+            max_occurrences=args.max_occurrences,
+        )
+    )
+
+    task = storage.set_task_recurrence(
+        task_id_query=args.task_id,
+        rule=rule
     )
     print(
-        f"Recurrence set for task {task['id']}: "
-        f"{rule['schedule_type']} '{rule['schedule_expression']}' (Rule ID: {rule['id']})"
+        f"Recurrence set for task {task.id}: "
+        f"{rule.schedule_type} '{rule.schedule_expression}' (Rule ID: {rule.id})"
     )
     return 0
 
@@ -249,15 +260,15 @@ def is_deleted_task(task: dict[str, Any]) -> bool:
     return task.get("status") == "deleted" or bool(task.get("deleted_at"))
 
 
-def handle_list(storage: AbstractStorage, args: argparse.Namespace) -> int:
-    tasks = [x.model_dump() for x in storage.load_tasks()]
+def handle_list(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
+    tasks = [x.model_dump(mode='json') for x in storage.load_tasks()]
 
     show_all = getattr(args, "all", False) or getattr(args, "mode", None) == "all"
     show_completed_only = getattr(args, "completed", False) or getattr(args, "mode", None) == "completed"
     include_completed = getattr(args, "include_completed", False)
 
     if args.status:
-        tasks = [t for t in tasks if t.get("status") == args.status]
+        tasks = [t for t in tasks if storage.task_status(t['id']).value == args.status]
     elif show_all:
         pass
     elif show_completed_only:
@@ -283,7 +294,7 @@ def handle_list(storage: AbstractStorage, args: argparse.Namespace) -> int:
     print("-" * 80)
     for t in tasks:
         tid = t.get("id", "")
-        status = t.get("status", "")
+        status = storage.task_status(t['id']) or ""
         priority = t.get("priority", "")
         recur = t.get("recurrence_rule_id") or "-"
         if len(recur) > 12:
