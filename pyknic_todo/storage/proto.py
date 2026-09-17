@@ -29,6 +29,12 @@ from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStat
 class ToDoStorageProto(metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
 
+    # TODO: there should be some clean-up method (but please note synchronization!):
+    #   - deleted tasks removing
+    #   - rules without tasks
+    #   - history events without tasks
+    #   - outdated history events
+
     @abc.abstractmethod
     def lock(
         self,
@@ -46,7 +52,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def load_tasks(self) -> list[Task]:
-        """Load all tasks as dictionaries."""
+        """Load all tasks."""
         raise NotImplementedError('This method is abstract')
 
     def save_tasks(self, tasks: list[Task]) -> None:
@@ -58,7 +64,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
-        """Load all recurrence rules as dictionaries."""
+        """Load all recurrence rules."""
         raise NotImplementedError('This method is abstract')
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
@@ -70,7 +76,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     def load_history(self) -> list[StateHistoryEvent]:
-        """Load all history events as dictionaries."""
+        """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
     def record_history_event(self, event: StateHistoryEvent) -> None:

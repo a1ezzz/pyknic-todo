@@ -49,12 +49,14 @@ from pyknic_todo.models import (
 )
 from pyknic_todo.settings import Settings
 
+from .helpers import exact_one_task, partial_uuid_select
+
 from .plain import (
-    AbstractTaskStorage,
-    AbstractRecurrenceRuleStorage,
-    AbstractHistoryStorage,
-    AbstractStorage,
-    TaskStorageUpdaterContext
+    TaskStorageUpdaterContextProto,
+    PlainTaskStorageProto,
+    PlainStateHistoryStorageProto,
+    PlainRecurrenceRuleStorageProto,
+    PlainStorageProto
 )
 
 
@@ -234,44 +236,19 @@ class BaseJsonEntityStorage:
 BaseEntityStorage = BaseJsonEntityStorage
 
 
-class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
+class JsonTaskStorage(PlainTaskStorageProto, BaseJsonEntityStorage):
     """JSON file-based implementation of TaskStorage."""
 
     # TODO: make the write row-by-row, it will increase the speed of 'append' operations so as a search
 
-    class UpdaterContext(TaskStorageUpdaterContext):
+    class UpdaterContext(TaskStorageUpdaterContextProto):
         # TODO: update docstring
 
-        def __init__(self, storage: AbstractTaskStorage, id_query: Union[uuid.UUID, str], query_full_match: bool = True):
-            TaskStorageUpdaterContext.__init__(self)
+        def __init__(self, storage: PlainTaskStorageProto, id_query: Union[uuid.UUID, str], query_full_match: bool = True):
+            TaskStorageUpdaterContextProto.__init__(self)
             self.__storage = storage
             self.__all_tasks = self.__storage.load_tasks()
-            self.__task = self.__find_task(id_query, full_match=query_full_match)
-
-        def __find_task(self, id_query: Union[uuid.UUID, str], full_match: bool = False) -> Task:
-            # TODO: please note! there is a code that relay on exceptions int this code
-            # TODO: change type of the id_query to the Task, UUID or str
-
-            partial_match = []
-            fully_matched = None
-            for t in self.__all_tasks:
-                if str(t.id).startswith(str(id_query)):  # TODO: is it fast enough? Converting to str doesn't look good
-                    if str(t.id) == str(id_query):
-                        if fully_matched is not None:
-                            raise ValueError(f"Ambiguous task ID prefix '{id_query}'")
-                        fully_matched = t
-                    elif not full_match:
-                        partial_match.append(t)
-
-            if fully_matched is not None:
-                return fully_matched
-
-            if partial_match:
-                if len(partial_match) > 1:
-                    raise ValueError(f"Ambiguous task ID prefix '{id_query}', matches {len(partial_match)} tasks")
-                return partial_match[0]
-
-            raise KeyError(f"Task '{id_query}' not found")
+            self.__task = exact_one_task(self.__all_tasks, id_query, query_full_match=query_full_match)
 
         def __call__(self) -> Task:
             return self.__task
@@ -337,7 +314,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             data["updated_at"] = "1"  # todo_models_now # TODO: update!
             self.save_document(data)
 
-    def updater_context(self, id_query: Union[uuid.UUID, str], query_full_match: bool = True) -> TaskStorageUpdaterContext:
+    def updater_context(self, id_query: Union[uuid.UUID, str], query_full_match: bool = True) -> TaskStorageUpdaterContextProto:
         return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
 
     def append_task(self, task: Task) -> None:
@@ -348,7 +325,7 @@ class JsonTaskStorage(AbstractTaskStorage, BaseJsonEntityStorage):
             self.save_tasks(tasks)
 
 
-class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntityStorage):
+class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, BaseJsonEntityStorage):
     """JSON file-based implementation of RecurrenceRuleStorage."""
 
     def __init__(
@@ -414,7 +391,7 @@ class JsonRecurrenceRuleStorage(AbstractRecurrenceRuleStorage, BaseJsonEntitySto
             self.save_recurrence_rules(rules)
 
 
-class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
+class JsonHistoryStorage(PlainStateHistoryStorageProto, BaseJsonEntityStorage):
     """JSON file-based implementation of HistoryStorage."""
 
     def __init__(
@@ -459,13 +436,12 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
     # --- Reading ---
 
     def load_history(self) -> list[StateHistoryEvent]:
-        with self.lock(exclusive=False):
+        with self.lock(exclusive=True):
             data = self.load_document()
             return [StateHistoryEvent(**e) for e in data.get("events", [])]
 
     def find_events_for_task(self, task_id_query: Union[uuid.UUID, str]) -> list[StateHistoryEvent]:
-        with self.lock(exclusive=False):
-            return [e for e in self.load_history() if e.task_id == task_id_query]
+        return [e for e in self.load_history() if partial_uuid_select(e.task_id, task_id_query)]
 
     def task_latest_status(self, task_id_query: Union[uuid.UUID, str]) -> TaskStatus:
         # TODO: real implementation must be faster!
@@ -477,12 +453,6 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
 
     # --- Writing ---
 
-    def save_history(self, events: list[StateHistoryEvent]) -> None:
-        with self.lock(exclusive=True):
-            data = self.load_document()
-            data["events"] = [x.model_dump() for x in events]
-            self.save_document(data)
-
     def record_history_event(self, event: StateHistoryEvent) -> None:
         with self.lock(exclusive=True):
             data = self.load_document()
@@ -490,7 +460,7 @@ class JsonHistoryStorage(AbstractHistoryStorage, BaseJsonEntityStorage):
             self.save_document(data)
 
 
-class JsonStorage(StorageLock, AbstractStorage):
+class JsonStorage(StorageLock, PlainStorageProto):
     """JSON facade storage coordinating JsonTaskStorage, JsonRecurrenceRuleStorage, and JsonHistoryStorage."""
 
     def __init__(
@@ -544,22 +514,19 @@ class JsonStorage(StorageLock, AbstractStorage):
         self.recurrence_storage = self._recurrence_storage
         self.history_storage = self._history_storage
 
-    @property
     def _tasks(self) -> JsonTaskStorage:
         return self._task_storage
 
-    @property
     def _recurrence_rules(self) -> JsonRecurrenceRuleStorage:
         return self._recurrence_storage
 
-    @property
     def _history(self) -> JsonHistoryStorage:
         return self._history_storage
 
     def _ensure_files(self) -> None:
-        self._tasks._ensure_file()
-        self._recurrence_rules._ensure_file()
-        self._history._ensure_file()
+        self._tasks()._ensure_file()
+        self._recurrence_rules()._ensure_file()
+        self._history()._ensure_file()
 
     def _read_json(self, path: Path) -> dict[str, Any]:
         with self.lock(exclusive=False):
@@ -597,14 +564,16 @@ class StorageFactory:
     _recurrence_backends: dict[str, Any] = {}
     _history_backends: dict[str, Any] = {}
 
+    # TODO: replace register!
+
     @classmethod
     def register(
         cls,
         storage_type: str,
-        storage_cls: type[AbstractStorage],
-        task_cls: Optional[type[AbstractTaskStorage]] = None,
-        recurrence_cls: Optional[type[AbstractRecurrenceRuleStorage]] = None,
-        history_cls: Optional[type[AbstractHistoryStorage]] = None,
+        storage_cls: type[PlainStorageProto],
+        task_cls: Optional[type[PlainTaskStorageProto]] = None,
+        recurrence_cls: Optional[type[PlainRecurrenceRuleStorageProto]] = None,
+        history_cls: Optional[type[PlainStateHistoryStorageProto]] = None,
     ) -> None:
         key = storage_type.lower().strip()
         cls._storage_backends[key] = storage_cls
@@ -626,7 +595,7 @@ class StorageFactory:
         data_dir: Optional[str | Path] = None,
         settings: Optional[Settings] = None,
         **kwargs: Any,
-    ) -> AbstractStorage:
+    ) -> PlainStorageProto:
         st = storage_type or (settings.storage_type if settings and hasattr(settings, "storage_type") else "json")
         key = st.lower().strip()
         if key not in cls._storage_backends:
@@ -634,7 +603,7 @@ class StorageFactory:
                 f"Unsupported storage type '{st}'. Available: {cls.get_registered_types()}"
             )
         backend_cls = cls._storage_backends[key]
-        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)  # type: ignore[no-any-return]
+        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)
 
     @classmethod
     def append_task_storage(
@@ -643,7 +612,7 @@ class StorageFactory:
         data_dir: Optional[str | Path] = None,
         settings: Optional[Settings] = None,
         **kwargs: Any,
-    ) -> AbstractTaskStorage:
+    ) -> PlainTaskStorageProto:
         st = storage_type or (settings.storage_type if settings and hasattr(settings, "storage_type") else "json")
         key = st.lower().strip()
         if key not in cls._task_backends:
@@ -651,7 +620,7 @@ class StorageFactory:
                 f"Unsupported task storage type '{st}'. Available: {cls.get_registered_types()}"
             )
         backend_cls = cls._task_backends[key]
-        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)  # type: ignore[no-any-return]
+        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)
 
     @classmethod
     def create_recurrence_storage(
@@ -660,7 +629,7 @@ class StorageFactory:
         data_dir: Optional[str | Path] = None,
         settings: Optional[Settings] = None,
         **kwargs: Any,
-    ) -> AbstractRecurrenceRuleStorage:
+    ) -> PlainRecurrenceRuleStorageProto:
         st = storage_type or (settings.storage_type if settings and hasattr(settings, "storage_type") else "json")
         key = st.lower().strip()
         if key not in cls._recurrence_backends:
@@ -668,7 +637,7 @@ class StorageFactory:
                 f"Unsupported recurrence storage type '{st}'. Available: {cls.get_registered_types()}"
             )
         backend_cls = cls._recurrence_backends[key]
-        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)  # type: ignore[no-any-return]
+        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)
 
     @classmethod
     def create_history_storage(
@@ -677,7 +646,7 @@ class StorageFactory:
         data_dir: Optional[str | Path] = None,
         settings: Optional[Settings] = None,
         **kwargs: Any,
-    ) -> AbstractHistoryStorage:
+    ) -> PlainStateHistoryStorageProto:
         st = storage_type or (settings.storage_type if settings and hasattr(settings, "storage_type") else "json")
         key = st.lower().strip()
         if key not in cls._history_backends:
@@ -685,7 +654,7 @@ class StorageFactory:
                 f"Unsupported history storage type '{st}'. Available: {cls.get_registered_types()}"
             )
         backend_cls = cls._history_backends[key]
-        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)  # type: ignore[no-any-return]
+        return backend_cls(data_dir=data_dir, settings=settings, **kwargs)
 
 
 # Register default JSON backend

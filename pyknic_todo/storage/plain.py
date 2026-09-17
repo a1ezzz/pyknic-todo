@@ -19,11 +19,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with pyknic_todo.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Storage layer and abstractions for pyknic-todo conforming to STORAGE.md."""
-
-# TODO: document the code
-# TODO: write tests for the code
-# TODO: refactor this
+"""Basic sorage layer and abstractions for pyknic-todo conforming to STORAGE.md."""
 
 import abc
 import types
@@ -33,9 +29,10 @@ import uuid
 from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateHistoryEvent, todo_models_now
 
 from .proto import ToDoStorageProto
+from .helpers import partial_uuid_select
 
 
-class TaskStorageUpdaterContext(metaclass=abc.ABCMeta):
+class TaskStorageUpdaterContextProto(metaclass=abc.ABCMeta):
     """This abstract class helps to update a single task and helps to hide implementation routine. """
 
     def __enter__(self) -> typing.Self:
@@ -60,145 +57,156 @@ class TaskStorageUpdaterContext(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def commit(self) -> None:
         """Save changes for a single task. (May be called multiple times)"""
-        # TODO: there is a consistency issue -- this context may be saved, but a related structures (like 'StateHistoryEvent') may be missing =(
         raise NotImplementedError('This method is abstract')
 
 
-class AbstractTaskStorage(metaclass=abc.ABCMeta):
+class PlainTaskStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for task storage backends."""
-    # TODO: is there should be some clean-up method (deleted tasks removing)? -- please note synchronization!
-    # TODO: rename
 
     @abc.abstractmethod
     def load_tasks(self) -> list[Task]:
-        """Load all tasks as dictionaries."""
+        """Load all tasks."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def save_tasks(self, tasks: list[Task]) -> None:
-        """Save tasks list."""
+        """Replace tasks and save them.
+
+        :param tasks: a new set of tasks (previous tasks will be discared)
+        """
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def updater_context(self, id_query: typing.Union[uuid.UUID, str], query_full_match: bool = True) -> TaskStorageUpdaterContext:
+    def updater_context(
+        self, task_id_query: typing.Union[uuid.UUID, str], query_full_match: bool = True
+    ) -> TaskStorageUpdaterContextProto:
         """Return a context that helps to update a single task that was found by the specified criteria
+
+        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
+        :param query_full_match: whether a task_id_query is a full identifier or a partial match may be used (work only
+        if a task_id_query is str-object)
         """
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def append_task(self, task: Task) -> None:
-        """Append a new task in a storage"""
+        """Append a new task in a storage.
+
+        :param task: a new task to add
+        """
         raise NotImplementedError('This method is abstract')
 
 
-class AbstractRecurrenceRuleStorage(metaclass=abc.ABCMeta):
+class PlainRecurrenceRuleStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for recurrence rule storage backends."""
-    # TODO: is there should be some clean-up method for orphaned rules (rules without tasks)?
-    # TODO: rename
 
     @abc.abstractmethod
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
-        """Load all recurrence rules as dictionaries."""
+        """Load all recurrence rules."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        """Save recurrence rules list."""
+        """Replace recurrence rules and save them.
+
+        :param rules: a new set of rules (previous rules will be discared)
+        """
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
-        """Create and persist a new recurrence rule."""
+        """Persist a new recurrence rule.
+
+        :param rule: a new rule to add
+        """
         raise NotImplementedError('This method is abstract')
 
 
-class AbstractHistoryStorage(metaclass=abc.ABCMeta):
+class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for state history storage backends."""
-    # TODO: is there should be some clean-up method for orphaned events (events without tasks)?
-    # TODO: rename -- it is not a general history, but a state related one
 
     @abc.abstractmethod
     def load_history(self) -> list[StateHistoryEvent]:
-        """Load all history events as dictionaries."""
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
-    def save_history(self, events: list[StateHistoryEvent]) -> None:
-        # TODO: remove this
-        """Save history events list."""
+        """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def record_history_event(self, event: StateHistoryEvent) -> None:
-        """Record a state change event."""
+        """Record a state change event.
+
+        :param event: a new event to save
+        """
         raise NotImplementedError('This method is abstract')
 
-    @abc.abstractmethod
     def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> list[StateHistoryEvent]:
-        """Find history events for a given task ID."""
-        raise NotImplementedError('This method is abstract')
+        """Find history events for a given task ID.
 
-    @abc.abstractmethod
+        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
+        """
+
+        return [e for e in self.load_history() if partial_uuid_select(e.task_id, task_id_query)]
+
     def task_latest_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
-        raise NotImplementedError('This method is abstract')
+        """Return the latest status for a task
+
+        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
+        """
+        events = self.find_events_for_task(task_id_query)
+        if events:
+            return (events[-1].next_state)
+
+        raise ValueError(f'Task id "{task_id_query}" was not found')
 
 
-class AbstractStorage(ToDoStorageProto, metaclass=abc.ABCMeta):
+class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
-    # TODO: rename -- it is not a general history, but a state related one
-    # TODO: it is better to hide storage implementations sudh as tasks and make them protected
 
-    @property
     @abc.abstractmethod
-    def _tasks(self) -> AbstractTaskStorage:
+    def _tasks(self) -> PlainTaskStorageProto:
         """Task storage component."""
         raise NotImplementedError('This method is abstract')
 
-    @property
     @abc.abstractmethod
-    def _recurrence_rules(self) -> AbstractRecurrenceRuleStorage:
+    def _recurrence_rules(self) -> PlainRecurrenceRuleStorageProto:
         """Recurrence rule storage component."""
         raise NotImplementedError('This method is abstract')
 
-    @property
     @abc.abstractmethod
-    def _history(self) -> AbstractHistoryStorage:
+    def _history(self) -> PlainStateHistoryStorageProto:
         """History storage component."""
         raise NotImplementedError('This method is abstract')
 
-    @abc.abstractmethod
-    def lock(
-        self,
-        exclusive: bool = True,
-        blocking: bool = True,
-    ) -> typing.ContextManager[None]:
-        """Acquire synchronization lock for storage operations."""
-        raise NotImplementedError('This method is abstract')
-
     def load_tasks(self) -> list[Task]:
-        return self._tasks.load_tasks()
+        """:meth:`.ToDoStorageProto.load_tasks` implementation."""
+        return self._tasks().load_tasks()
 
     def save_tasks(self, tasks: list[Task]) -> None:
-        self._tasks.save_tasks(tasks)
+        """:meth:`.ToDoStorageProto.save_tasks` implementation."""
+        self._tasks().save_tasks(tasks)
 
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
-        return self._recurrence_rules.load_recurrence_rules()
+        """:meth:`.ToDoStorageProto.load_recurrence_rules` implementation."""
+        return self._recurrence_rules().load_recurrence_rules()
 
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        self._recurrence_rules.save_recurrence_rules(rules)
+        """:meth:`.ToDoStorageProto.save_recurrence_rules` implementation."""
+        self._recurrence_rules().save_recurrence_rules(rules)
 
     def load_history(self) -> list[StateHistoryEvent]:
-        return self._history.load_history()
+        """:meth:`.ToDoStorageProto.load_history` implementation."""
+        return self._history().load_history()
 
     def record_history_event(self, event: StateHistoryEvent) -> None:
-        self._history.record_history_event(event)
+        """:meth:`.ToDoStorageProto.record_history_event` implementation."""
+        self._history().record_history_event(event)
 
     def append_task(self, task: Task) -> None:
+        """:meth:`.ToDoStorageProto.append_task` implementation."""
 
         with self.lock(exclusive=True):
-            self._tasks.append_task(task)
+            self._tasks().append_task(task)
 
-            self._history.record_history_event(
+            self._history().record_history_event(
                 StateHistoryEvent(
                     task_id=task.id,
                     next_state=TaskStatus.new,
@@ -206,10 +214,11 @@ class AbstractStorage(ToDoStorageProto, metaclass=abc.ABCMeta):
             )
 
     def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
-        # TODO: real implementation must be faster!
+        """:meth:`.ToDoStorageProto.task_status` implementation."""
+        # TODO: there should be a better way to retreive a status!
 
-        with self._tasks.updater_context(task_id_query, query_full_match=False) as tc:  # TODO: may be it is better to have read-only analog
-            return self._history.task_latest_status(tc().id)
+        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
+            return self._history().task_latest_status(tc().id)
 
     def set_task_status(
         self,
@@ -217,32 +226,36 @@ class AbstractStorage(ToDoStorageProto, metaclass=abc.ABCMeta):
         new_status: TaskStatus,
         comment: typing.Optional[str] = None,
     ) -> Task:
+        """:meth:`.ToDoStorageProto.set_task_status` implementation."""
+
         with self.lock(exclusive=True):
 
-            casted_id = str(task_id_query.id) if isinstance(task_id_query, Task) else str(task_id_query)
-
-            with self._tasks.updater_context(casted_id, query_full_match=False) as tc:
+            with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
                 task = tc()
 
                 now = todo_models_now()
 
-                if new_status in (TaskStatus.done, TaskStatus.deleted):
+                task_changed = False
 
+                if new_status == TaskStatus.done:
+                    task_changed = True
+                    task.completed_at = now
+                elif task.completed_at and new_status != TaskStatus.deleted:
+                    task_changed = True
+                    task.completed_at = None
+
+                if new_status == TaskStatus.deleted:
+                    task_changed = True
+                    task.deleted_at = now
+                elif task.deleted_at:
+                    task_changed = True
+                    task.deleted_at = None
+
+                if task_changed:
                     task.version += 1
-
-                    if new_status == TaskStatus.done:
-                        task.completed_at = now
-                    elif task.completed_at:
-                        task.completed_at = None
-
-                    if new_status == TaskStatus.deleted:
-                        task.deleted_at = now
-                    elif task.deleted_at:
-                        task.deleted_at = None
-
                     tc.commit()
 
-                self._history.record_history_event(
+                self._history().record_history_event(
                     StateHistoryEvent(
                         task_id=task.id,
                         next_state=TaskStatus(new_status),
@@ -257,13 +270,14 @@ class AbstractStorage(ToDoStorageProto, metaclass=abc.ABCMeta):
         task_id_query: typing.Union[uuid.UUID, str],
         rule: typing.Optional[RecurrenceRule] = None
     ) -> Task:
+        """:meth:`.ToDoStorageProto.set_task_recurrence` implementation."""
         with self.lock(exclusive=True):
 
-            with self._tasks.updater_context(task_id_query, query_full_match=False) as tc:
+            with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
                 task = tc()
 
                 if rule:
-                    self._recurrence_rules.append_recurrence_rule(rule)
+                    self._recurrence_rules().append_recurrence_rule(rule)
                     task.recurrence_rule_id = rule.id
                 else:
                     task.recurrence_rule_id = None

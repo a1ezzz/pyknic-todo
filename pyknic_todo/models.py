@@ -33,7 +33,7 @@ class TaskStatus(enum.Enum):
     in_progress = "in_progress"
     done = "done"
     cancelled = "cancelled"
-    expited = "expired"
+    expired = "expired"
     skipped = "skipped"
     deleted = "deleted"
 
@@ -72,7 +72,7 @@ class RecurrenceRule(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     schedule_type: RecurrenceScheduleType
     schedule_expression: str
-    end_condition: EndCondition
+    end_condition: EndCondition = Field(default_factory=lambda: EndCondition())
     created_at: datetime = Field(default_factory=todo_models_now)
 
 
