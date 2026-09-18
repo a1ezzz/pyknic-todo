@@ -36,21 +36,6 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
     #   - outdated history events
 
     @abc.abstractmethod
-    def lock(
-        self,
-        exclusive: bool = True,
-        blocking: bool = True,
-    ) -> typing.ContextManager[None]:
-        """Acquire synchronization lock for storage operations.
-
-        :param exclusive: define a mode of a lock -- where the exclusive or shared mode should be used
-        :param blocking: if True then this call will wait for a lock endlessly, otherwise (if it is False) the
-        code will acuire the lock or raise OSError immediately
-        """
-        # TODO: think about reasonable timeout for a blocking mode on
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
     def load_tasks(self) -> list[Task]:
         """Load all tasks."""
         raise NotImplementedError('This method is abstract')

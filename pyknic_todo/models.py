@@ -115,35 +115,3 @@ class StateHistoryEvent(BaseModel):
     # actor_client_id: str  # TODO: client_id should be persistent somewhere!
     next_state: TaskStatus
     comment: str = ""  # TODO: checkout usage
-
-
-class TaskDocument(BaseModel):
-
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
-
-    model_config = {"populate_by_name": True}
-
-    schema_version: str = Field(alias="$schema_version")
-    client_id: str
-    updated_at: str
-    items: list[Task] = Field(default_factory=list)
-
-
-class RecurrenceRuleDocument(BaseModel):
-
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
-
-    model_config = {"populate_by_name": True}
-
-    schema_version: str = Field(alias="$schema_version")
-    items: list[RecurrenceRule] = Field(default_factory=list)
-
-
-class StateHistoryDocument(BaseModel):
-
-    model_config = ConfigDict(validate_assignment=True, extra='forbid')
-
-    model_config = {"populate_by_name": True}
-
-    schema_version: str = Field(alias="$schema_version")
-    events: list[StateHistoryEvent] = Field(default_factory=list)

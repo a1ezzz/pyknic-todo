@@ -7,7 +7,6 @@ from pyknic_todo.storage.proto import ToDoStorageProto
 def test_abstract() -> None:
     pytest.raises(TypeError, ToDoStorageProto)
 
-    pytest.raises(NotImplementedError, ToDoStorageProto.lock, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, ToDoStorageProto.load_tasks, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, ToDoStorageProto.save_tasks, None, [])  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, ToDoStorageProto.load_recurrence_rules, None)  # type: ignore[call-overload]

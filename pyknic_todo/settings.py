@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         ),
         description="Directory to store JSON data",
     )
-    schema_version: str = Field(
+    schema_version: str = Field(  # TODO: remove this!
         default="1.0.0",
         description="Data schema version for storage files",
     )
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
         default="pending",
         description="Default status for new tasks",
     )
-    storage_type: str = Field(
+    storage_type: str = Field(  # TODO: update this!
         default="json",
         validation_alias=AliasChoices(
             "PYKNIC_TODO_STORAGE_TYPE", "TODO_STORAGE_TYPE", "storage_type"

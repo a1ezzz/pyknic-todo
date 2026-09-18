@@ -203,15 +203,14 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     def append_task(self, task: Task) -> None:
         """:meth:`.ToDoStorageProto.append_task` implementation."""
 
-        with self.lock(exclusive=True):
-            self._tasks().append_task(task)
+        self._tasks().append_task(task)
 
-            self._history().record_history_event(
-                StateHistoryEvent(
-                    task_id=task.id,
-                    next_state=TaskStatus.new,
-                )
+        self._history().record_history_event(
+            StateHistoryEvent(
+                task_id=task.id,
+                next_state=TaskStatus.new,
             )
+        )
 
     def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
         """:meth:`.ToDoStorageProto.task_status` implementation."""
@@ -228,42 +227,40 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     ) -> Task:
         """:meth:`.ToDoStorageProto.set_task_status` implementation."""
 
-        with self.lock(exclusive=True):
+        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
+            task = tc()
 
-            with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
-                task = tc()
+            now = todo_models_now()
 
-                now = todo_models_now()
+            task_changed = False
 
-                task_changed = False
+            if new_status == TaskStatus.done:
+                task_changed = True
+                task.completed_at = now
+            elif task.completed_at and new_status != TaskStatus.deleted:
+                task_changed = True
+                task.completed_at = None
 
-                if new_status == TaskStatus.done:
-                    task_changed = True
-                    task.completed_at = now
-                elif task.completed_at and new_status != TaskStatus.deleted:
-                    task_changed = True
-                    task.completed_at = None
+            if new_status == TaskStatus.deleted:
+                task_changed = True
+                task.deleted_at = now
+            elif task.deleted_at:
+                task_changed = True
+                task.deleted_at = None
 
-                if new_status == TaskStatus.deleted:
-                    task_changed = True
-                    task.deleted_at = now
-                elif task.deleted_at:
-                    task_changed = True
-                    task.deleted_at = None
+            if task_changed:
+                task.version += 1
+                tc.commit()
 
-                if task_changed:
-                    task.version += 1
-                    tc.commit()
-
-                self._history().record_history_event(
-                    StateHistoryEvent(
-                        task_id=task.id,
-                        next_state=TaskStatus(new_status),
-                        comment=comment or ""
-                    )
+            self._history().record_history_event(
+                StateHistoryEvent(
+                    task_id=task.id,
+                    next_state=TaskStatus(new_status),
+                    comment=comment or ""
                 )
+            )
 
-                return task
+            return task
 
     def set_task_recurrence(
         self,
@@ -271,19 +268,18 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         rule: typing.Optional[RecurrenceRule] = None
     ) -> Task:
         """:meth:`.ToDoStorageProto.set_task_recurrence` implementation."""
-        with self.lock(exclusive=True):
 
-            with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
-                task = tc()
+        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
+            task = tc()
 
-                if rule:
-                    self._recurrence_rules().append_recurrence_rule(rule)
-                    task.recurrence_rule_id = rule.id
-                else:
-                    task.recurrence_rule_id = None
+            if rule:
+                self._recurrence_rules().append_recurrence_rule(rule)
+                task.recurrence_rule_id = rule.id
+            else:
+                task.recurrence_rule_id = None
 
-                task.version += 1
-                task.updated_at = todo_models_now()
+            task.version += 1
+            task.updated_at = todo_models_now()
 
-                tc.commit()
-                return task
+            tc.commit()
+            return task

@@ -333,7 +333,7 @@ def main(
     if getattr(args, "storage_type", None):
         settings = settings.model_copy(update={"storage_type": args.storage_type})
 
-    storage = StorageFactory.create_storage(settings=settings)
+    storage = StorageFactory[settings.storage_type](settings=settings)
 
     try:
         if args.command == "add":
