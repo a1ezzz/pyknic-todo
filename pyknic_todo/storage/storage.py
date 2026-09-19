@@ -23,18 +23,20 @@
 
 # TODO: document the code
 # TODO: write tests for the code
-# TODO: may be it is better to search with a search engine that works in conjuction with storage engine. This may help to:
-#   - not to load JSON files multiple times!
-#   - not to load everything from SQL-a-like storages
 
-from __future__ import annotations
+# TODO: Logic is similar to the IOVirtualClient (from pyknic.lib.io.clients.collection) may be to do something with it
+
+import typing
+
+from pyknic.lib.registry import APIRegistry
+from pyknic.lib.uri import URI
+
+from pyknic_todo.storage.proto import ToDoStorageProto
 
 
-from .json import JsonStorage
+__storage_registry__ = APIRegistry()
 
 
-# TODO: update registry!
-
-StorageFactory = {
-    "json": JsonStorage
-}
+def storage_factory(storage_uri: URI) -> ToDoStorageProto:
+    storage_handler_cls: typing.Type[ToDoStorageProto] = __storage_registry__.get(storage_uri.scheme)
+    return storage_handler_cls.create_storage(storage_uri)

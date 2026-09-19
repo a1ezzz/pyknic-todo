@@ -31,13 +31,17 @@ import uuid
 
 import pydantic
 
+from pyknic.lib.registry import register_api
+from pyknic.lib.uri import URI
+
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskStatus
-from pyknic_todo.settings import Settings
 
 from .helpers import exact_one_task, partial_uuid_select
 
 from .plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto, PlainStateHistoryStorageProto
 from .plain import PlainRecurrenceRuleStorageProto, PlainStorageProto
+
+from .storage import __storage_registry__
 
 
 @enum.unique
@@ -70,6 +74,7 @@ class StorageLock:
         self.__lock_file = lock_file.resolve()
         self.__thread_lock = threading.Lock()
 
+    # TODO: contextmanager is marked as deprecated
     @contextlib.contextmanager
     def lock(self, blocking: bool = True) -> typing.Iterator[None]:
         """Try to lock a file
@@ -112,7 +117,8 @@ class StorageLock:
 class _BaseJsonEntityStorage:
     """Base storage handling JSON file persistence and synchronization for an entity."""
 
-    def __init__(self, file_type: JsonFile, lock: StorageLock, settings: Settings) -> None:
+    def __init__(self, data_dir: pathlib.Path, file_type: JsonFile, lock: StorageLock) -> None:
+        # TODO: docs + tests
         """Create a new basic storage and initialize an empty file if there wasn't before
 
         :param file_type: a type of a file this storage is used for
@@ -122,7 +128,7 @@ class _BaseJsonEntityStorage:
 
         self.__file_type = file_type
         self.__model_cls = getattr(JsonFileModels, self.__file_type.name).value
-        self.__file_path = settings.data_dir / str(self.__file_type.value)
+        self.__file_path = data_dir / str(self.__file_type.value)
 
         self.__lock_manager = lock
         self.__ensure_file()
@@ -230,9 +236,10 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
 
     def __init__(
         self,
+        data_dir: pathlib.Path,
         lock: StorageLock,
-        settings: Settings
     ) -> None:
+        # TODO: docs + tests
         """ Create a new task storage
 
         :param lock: exclusive I/O lock
@@ -242,9 +249,9 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         PlainTaskStorageProto.__init__(self)
         _BaseJsonEntityStorage.__init__(
             self,
+            data_dir=data_dir,
             file_type=JsonFile.tasks,
             lock=lock,
-            settings=settings
         )
 
     def load_tasks(self) -> typing.List[Task]:
@@ -277,9 +284,10 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
 
     def __init__(
         self,
+        data_dir: pathlib.Path,
         lock: StorageLock,
-        settings: Settings
     ) -> None:
+        # TODO: docs + tests
         """ Create a new rule storage
 
         :param lock: exclusive I/O lock
@@ -289,9 +297,9 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
         PlainRecurrenceRuleStorageProto.__init__(self)
         _BaseJsonEntityStorage.__init__(
             self,
+            data_dir=data_dir,
             file_type=JsonFile.recurrence_rules,
             lock=lock,
-            settings=settings,
         )
 
     def load_recurrence_rules(self) -> typing.List[RecurrenceRule]:
@@ -315,9 +323,10 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
 
     def __init__(
         self,
+        data_dir: pathlib.Path,
         lock: StorageLock,
-        settings: Settings
     ) -> None:
+        # TODO: docs + tests
         """ Create a new state-history storage
 
         :param lock: exclusive I/O lock
@@ -327,9 +336,9 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
         PlainStateHistoryStorageProto.__init__(self)
         _BaseJsonEntityStorage.__init__(
             self,
+            data_dir=data_dir,
             file_type=JsonFile.states_history,
             lock=lock,
-            settings=settings,
         )
 
     def load_history(self) -> typing.List[StateHistoryEvent]:
@@ -357,23 +366,38 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
         self._append_json(event)
 
 
+__json_storage_scheme__ = 'json+file'
+
+
+@register_api(__storage_registry__, __json_storage_scheme__)
 class JsonStorage(PlainStorageProto):
     """JSON facade storage coordinating JsonTaskStorage, JsonRecurrenceRuleStorage, and JsonHistoryStorage."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, storage_uri: URI) -> None:
+        # TODO: docs + tests
         """ Create a new storage
 
         :param settings: storage settings
         """
         PlainStorageProto.__init__(self)
-        self.settings = settings
 
-        self.data_dir = self.settings.data_dir.resolve()
-        self.__lock = StorageLock(lock_file=(self.data_dir / ".lock"))
+        if storage_uri.scheme != 'json+file':
+            raise ValueError(f'Invalid storage scheme -- {storage_uri.scheme} ({__json_storage_scheme__} is expected)')
 
-        self.__ts = JsonTaskStorage(settings=self.settings, lock=self.__lock)
-        self.__rs = JsonRecurrenceRuleStorage(settings=self.settings, lock=self.__lock)
-        self.__hs = JsonHistoryStorage(settings=self.settings, lock=self.__lock)
+        if storage_uri.path is None:
+            raise ValueError(f'A directory path was not specified with URI -- {storage_uri}')
+
+        self.__data_dir = pathlib.Path('/') / pathlib.Path(storage_uri.path)
+        assert(self.__data_dir.is_absolute())
+
+        if self.__data_dir.exists() and not self.__data_dir.is_dir():
+            raise ValueError(f'Storage directory exists and this is not a directory -- {self.__data_dir}')
+
+        self.__lock = StorageLock(lock_file=(self.__data_dir / ".lock"))
+
+        self.__ts = JsonTaskStorage(self.__data_dir, lock=self.__lock)
+        self.__rs = JsonRecurrenceRuleStorage(self.__data_dir, lock=self.__lock)
+        self.__hs = JsonHistoryStorage(self.__data_dir, lock=self.__lock)
 
     def _tasks(self) -> JsonTaskStorage:
         """ :meth:`.PlainStorageProto._tasks` method implementation
@@ -389,3 +413,8 @@ class JsonStorage(PlainStorageProto):
         """ :meth:`.PlainStorageProto._history` method implementation
         """
         return self.__hs
+
+    @classmethod
+    def create_storage(cls, storage_uri: URI) -> 'JsonStorage':
+        # TODO: docs + tests
+        return cls(storage_uri)

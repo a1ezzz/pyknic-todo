@@ -1,18 +1,28 @@
 
 import pathlib
+import tempfile
+import typing
 import uuid
 
 import pytest
 
+from pyknic.lib.uri import URI
+
 from pyknic_todo.models import Task, TaskPriority, RecurrenceRule, RecurrenceScheduleType, RecurrenceEndCondtionType
 from pyknic_todo.models import EndCondition, TaskStatus, StateHistoryEvent
-from pyknic_todo.settings import Settings
 
 from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainRecurrenceRuleStorageProto
 from pyknic_todo.storage.plain import PlainStateHistoryStorageProto, PlainStorageProto
 
 from pyknic_todo.storage.json import StorageLock, JsonTaskStorage, JsonRecurrenceRuleStorage, JsonHistoryStorage
-from pyknic_todo.storage.json import JsonStorage, JsonFile
+from pyknic_todo.storage.json import JsonStorage, JsonFile, __json_storage_scheme__
+
+
+@pytest.fixture
+def json_tmp_uri() -> typing.Generator[URI, None, None]:
+
+    with tempfile.TemporaryDirectory(prefix='pytest-pyknic_todo', suffix='json_tmp_uri_fixture') as tmp_dir:
+        yield URI.parse(f'{__json_storage_scheme__}:///{tmp_dir}')
 
 
 class TestStorageLock:
@@ -38,7 +48,7 @@ class TestStorageLock:
 class TestJsonTaskStorage:
 
     def test(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
         assert(isinstance(ts, PlainTaskStorageProto))
 
         assert((tmp_path / JsonFile.tasks.value).exists() is True)
@@ -73,7 +83,7 @@ class TestJsonTaskStorage:
         assert(tasks[0].priority == TaskPriority("low"))
 
     def test_context(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task = Task(
             title="Isolated task",
@@ -109,7 +119,7 @@ class TestJsonTaskStorage:
         assert(tasks[0].tags == ["foo"])
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task_description = """The GNU General Public License is a free, copyleft license for...
 
@@ -122,9 +132,7 @@ class TestJsonTaskStorage:
 class TestJsonRecurrenceRuleStorage:
 
     def test(self, tmp_path: pathlib.Path) -> None:
-        rs = JsonRecurrenceRuleStorage(
-            settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock'))
-        )
+        rs = JsonRecurrenceRuleStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
         assert(isinstance(rs, PlainRecurrenceRuleStorageProto))
 
         assert((tmp_path / JsonFile.tasks.value).exists() is False)
@@ -162,9 +170,7 @@ class TestJsonRecurrenceRuleStorage:
 class TestJsonHistoryStorage:
 
     def test(self, tmp_path: pathlib.Path) -> None:
-        hs = JsonHistoryStorage(
-            settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock'))
-        )
+        hs = JsonHistoryStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
         assert(isinstance(hs, PlainStateHistoryStorageProto))
 
         assert((tmp_path / JsonFile.tasks.value).exists() is False)
@@ -192,9 +198,7 @@ class TestJsonHistoryStorage:
         assert(hs.task_latest_status(task_id) == TaskStatus.done)
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
-        hs = JsonHistoryStorage(
-            settings=Settings(data_dir=tmp_path), lock=StorageLock(lock_file=(tmp_path / '.lock'))
-        )
+        hs = JsonHistoryStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task_id = uuid.uuid4()  # there is no check for a task existance
 
@@ -219,17 +223,19 @@ class TestJsonHistoryStorage:
 
 class TestJsonStorage:
 
-    def test(self, tmp_path: pathlib.Path) -> None:
-        s = JsonStorage(settings=Settings(data_dir=tmp_path))
+    def test(self, json_tmp_uri: URI) -> None:
+        assert(json_tmp_uri.path)
+
+        s = JsonStorage(json_tmp_uri)
         assert(isinstance(s, PlainStorageProto))
 
         assert(isinstance(s._tasks(), JsonTaskStorage))
         assert(isinstance(s._recurrence_rules(), JsonRecurrenceRuleStorage))
         assert(isinstance(s._history(), JsonHistoryStorage))
 
-        assert((tmp_path / JsonFile.tasks.value).exists() is True)
-        assert((tmp_path / JsonFile.recurrence_rules.value).exists() is True)
-        assert((tmp_path / JsonFile.states_history.value).exists() is True)
+        assert((pathlib.Path('/') / pathlib.Path(json_tmp_uri.path) / JsonFile.tasks.value).exists() is True)
+        assert((pathlib.Path('/') / pathlib.Path(json_tmp_uri.path) / JsonFile.recurrence_rules.value).exists() is True)
+        assert((pathlib.Path('/') / pathlib.Path(json_tmp_uri.path) / JsonFile.states_history.value).exists() is True)
 
         # smoke test
 

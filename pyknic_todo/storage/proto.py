@@ -23,6 +23,8 @@ import abc
 import typing
 import uuid
 
+from pyknic.lib.uri import URI
+
 from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStatus
 
 
@@ -34,6 +36,12 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
     #   - rules without tasks
     #   - history events without tasks
     #   - outdated history events
+
+    @classmethod
+    @abc.abstractmethod
+    def create_storage(cls, storage_uri: URI) -> 'ToDoStorageProto':
+        # TODO: docs + test
+        raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
     def load_tasks(self) -> list[Task]:

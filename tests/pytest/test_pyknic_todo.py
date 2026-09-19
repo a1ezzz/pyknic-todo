@@ -11,9 +11,11 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+from pyknic.lib.uri import URI
+
 from pyknic_todo.cli import main
 from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskPriority, RecurrenceEndCondtionType, RecurrenceScheduleType, EndCondition, TaskStatus
-from pyknic_todo.settings import Settings
+from pyknic_todo.storage.json import __json_storage_scheme__
 
 from pyknic_todo.storage.json import (
     PlainTaskStorageProto,
@@ -26,26 +28,27 @@ from pyknic_todo.storage.json import (
     JsonTaskStorage,
 )
 
-from pyknic_todo.storage.storage import StorageFactory
-
 from pyknic_todo.storage.json import StorageLock
 
 
 def _concurrent_create_worker(data_dir_str: str, index: int) -> None:
-    storage = JsonStorage(Settings(data_dir=Path(data_dir_str)))
+    storage = JsonStorage(data_dir_str)
     storage.append_task(Task(title=f"Concurrent task {index}"))
 
 
 class TestPyknicTodo(unittest.TestCase):
     def setUp(self) -> None:
+        # TODO: replace JsonStorage + json_tmp_uri with the inmemory storage
+
         self.temp_dir = tempfile.mkdtemp()
         self.data_dir = Path(self.temp_dir) / "data"
+        self.temp_json_uri = URI.parse(f'{__json_storage_scheme__}:///{self.data_dir}')
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_create_task_and_history(self) -> None:
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         task = Task(
             title="Buy groceries",
             description="Milk, bread, apples",
@@ -81,7 +84,7 @@ class TestPyknicTodo(unittest.TestCase):
         # self.assertEqual(event["next_state"], "new")
 
     def test_change_status(self) -> None:
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         task = Task(title="Deploy app")
         storage.append_task(task)
 
@@ -103,7 +106,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(history[2].next_state, TaskStatus.done)
 
     def test_set_recurrence_schedule(self) -> None:
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         task = Task(title="Weekly review", priority=TaskPriority("medium"))
         storage.append_task(task)
 
@@ -125,13 +128,13 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(rule.end_condition.max_occurrences, 5)
 
     def test_cli_end_to_end(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
+        data_arg = f"--storage-uri={self.temp_json_uri}"
 
         # 1. Add task via CLI
         code = main([data_arg, "add", "Write docs", "-p", "high", "-t", "docs,work"])
         self.assertEqual(code, 0)
 
-        tasks = JsonStorage(Settings(data_dir=self.data_dir)).load_tasks()
+        tasks = JsonStorage(self.temp_json_uri).load_tasks()
         self.assertEqual(len(tasks), 1)
         task_id = tasks[0].id
         self.assertEqual(tasks[0].title, "Write docs")
@@ -141,7 +144,7 @@ class TestPyknicTodo(unittest.TestCase):
         # 2. Change status to in_progress
         code = main([data_arg, "status", str(task_id)[:8], "in_progress"])
         self.assertEqual(code, 0)
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         tasks = storage.load_tasks()
         self.assertEqual(storage.task_status(tasks[0].id), TaskStatus.in_progress)
 
@@ -158,10 +161,10 @@ class TestPyknicTodo(unittest.TestCase):
             "never",
         ])
         self.assertEqual(code, 0)
-        tasks = JsonStorage(Settings(data_dir=self.data_dir)).load_tasks()
+        tasks = JsonStorage(self.temp_json_uri).load_tasks()
         self.assertIsNotNone(tasks[0].recurrence_rule_id)
 
-        rules = JsonStorage(Settings(data_dir=self.data_dir)).load_recurrence_rules()
+        rules = JsonStorage(self.temp_json_uri).load_recurrence_rules()
         self.assertEqual(len(rules), 1)
         self.assertEqual(rules[0].schedule_type, RecurrenceScheduleType.cron)
         self.assertEqual(rules[0].schedule_expression, "0 9 * * 1")
@@ -169,7 +172,7 @@ class TestPyknicTodo(unittest.TestCase):
         # 4. Mark done via shorthand
         code = main([data_arg, "done", str(task_id)[:8]])
         self.assertEqual(code, 0)
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         tasks = storage.load_tasks()
         self.assertEqual(storage.task_status(tasks[0].id), TaskStatus.done)
 
@@ -177,81 +180,60 @@ class TestPyknicTodo(unittest.TestCase):
         code = main([data_arg, "list"])
         self.assertEqual(code, 0)
 
-    def test_settings_defaults(self) -> None:
-        settings = Settings()
-        self.assertEqual(settings.schema_version, "1.0.0")
-        self.assertEqual(settings.client_id_prefix, "cli")
-        self.assertEqual(settings.default_priority, "medium")
-        self.assertEqual(settings.default_status, "pending")
-        self.assertEqual(settings.data_dir, Path("./data"))
+    # TODO: ???
+    # def test_settings_env_override(self) -> None:
+    #     with patch.dict(os.environ, {
+    #         "PYKNIC_TODO_DATA_DIR": "/tmp/custom_data",
+    #         "PYKNIC_TODO_DEFAULT_PRIORITY": "urgent",
+    #         "PYKNIC_TODO_DEFAULT_STATUS": "new",
+    #     }):
+    #         settings = Settings()
+    #         self.assertEqual(settings.data_dir, Path("/tmp/custom_data"))
+    #         self.assertEqual(settings.default_priority, "urgent")
+    #         self.assertEqual(settings.default_status, "new")
+    # 
+    # def test_settings_todo_data_dir_alias(self) -> None:
+    #     with patch.dict(os.environ, {
+    #         "TODO_DATA_DIR": "/tmp/alias_data",
+    #     }, clear=True):
+    #         settings = Settings()
+    #         self.assertEqual(settings.data_dir, Path("/tmp/alias_data"))
+    # 
+    # def test_storage_with_custom_settings(self) -> None:
+    #     custom_settings = Settings(
+    #         data_dir=self.data_dir,
+    #         schema_version="2.0.0",
+    #         client_id_prefix="worker",
+    #     )
+    #     storage = JsonStorage(settings=custom_settings)
+    #     task = Task(title="Custom task", priority=TaskPriority("high"))
+    #     storage.append_task(task)
+    #     self.assertEqual(task.priority, TaskPriority("high"))
 
-    def test_settings_env_override(self) -> None:
-        with patch.dict(os.environ, {
-            "PYKNIC_TODO_DATA_DIR": "/tmp/custom_data",
-            "PYKNIC_TODO_DEFAULT_PRIORITY": "urgent",
-            "PYKNIC_TODO_DEFAULT_STATUS": "new",
-        }):
-            settings = Settings()
-            self.assertEqual(settings.data_dir, Path("/tmp/custom_data"))
-            self.assertEqual(settings.default_priority, "urgent")
-            self.assertEqual(settings.default_status, "new")
+    #     # Verify client_id and schema_version in tasks.json
+    #     with open(self.data_dir / "tasks.json", "r", encoding="utf-8") as f:
+    #         data = json.load(f)
+    #     # TODO: fix?!
+    #     # self.assertEqual(data["$schema_version"], "2.0.0")
+    #     # self.assertTrue(data["client_id"].startswith("worker-"))
 
-    def test_settings_todo_data_dir_alias(self) -> None:
-        with patch.dict(os.environ, {
-            "TODO_DATA_DIR": "/tmp/alias_data",
-        }, clear=True):
-            settings = Settings()
-            self.assertEqual(settings.data_dir, Path("/tmp/alias_data"))
+    # TODO: ???
+    # def test_cli_config_command(self) -> None:
+    #     data_arg = f"--storage-uri={self.temp_json_uri}"
+    #     f = io.StringIO()
+    #     with patch("sys.stdout", f):
+    #         code = main([data_arg, "config"])
+    #     self.assertEqual(code, 0)
 
-    def test_storage_with_custom_settings(self) -> None:
-        custom_settings = Settings(
-            data_dir=self.data_dir,
-            schema_version="2.0.0",
-            client_id_prefix="worker",
-        )
-        storage = JsonStorage(settings=custom_settings)
-        task = Task(title="Custom task", priority=TaskPriority("high"))
-        storage.append_task(task)
-        self.assertEqual(task.priority, TaskPriority("high"))
-
-        # Verify client_id and schema_version in tasks.json
-        with open(self.data_dir / "tasks.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # TODO: fix?!
-        # self.assertEqual(data["$schema_version"], "2.0.0")
-        # self.assertTrue(data["client_id"].startswith("worker-"))
-
-    def test_cli_config_command(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        f = io.StringIO()
-        with patch("sys.stdout", f):
-            code = main([data_arg, "config"])
-        self.assertEqual(code, 0)
-        output = f.getvalue()
-        self.assertIn("data_dir:", output)
-        self.assertIn("schema_version: 1.0.0", output)
-
-        f_json = io.StringIO()
-        with patch("sys.stdout", f_json):
-            code = main([data_arg, "config", "--json"])
-        self.assertEqual(code, 0)
-        data = json.loads(f_json.getvalue())
-        self.assertEqual(data["schema_version"], "1.0.0")
-        self.assertEqual(data["default_priority"], "medium")
-
-    def test_cli_uses_custom_settings(self) -> None:
-        settings = Settings(
-            data_dir=self.data_dir,
-            default_priority="urgent",
-        )
-        code = main(["add", "Urgent by default"], settings=settings)
-        self.assertEqual(code, 0)
-        tasks = JsonStorage(settings=settings).load_tasks()
-        self.assertEqual(len(tasks), 1)
-        self.assertEqual(tasks[0].priority, TaskPriority("urgent"))
+    #     f_json = io.StringIO()
+    #     with patch("sys.stdout", f_json):
+    #         code = main([data_arg, "config", "--json"])
+    #     self.assertEqual(code, 0)
+    #     data = json.loads(f_json.getvalue())
+    #     self.assertEqual(data["default_priority"], "medium")
 
     def test_flock_called_on_create_and_load(self) -> None:
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         with patch("fcntl.flock", wraps=None) as mock_flock:
             storage.append_task(Task(title="Test task with flock"))
             self.assertTrue(mock_flock.called)
@@ -314,8 +296,8 @@ class TestPyknicTodo(unittest.TestCase):
     #     self.assertEqual(len(history), 10)
 
     def test_list_default_hides_completed_and_deleted(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        data_arg = f"--storage-uri={self.temp_json_uri}"
+        storage = JsonStorage(self.temp_json_uri)
         t_pending = Task(title="Pending task")
         t_in_progress = Task(title="In progress task")
         storage.append_task(t_pending)
@@ -349,8 +331,8 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertNotIn("Deleted task", table_text)
 
     def test_list_all_flag_shows_all_tasks(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        data_arg = f"--storage-uri={self.temp_json_uri}"
+        storage = JsonStorage(self.temp_json_uri)
         storage.append_task(Task(title="Pending task"))
         storage.append_task(Task(title="Done task"))
         storage.append_task(Task(title="Deleted task"))
@@ -382,8 +364,8 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertIn("Deleted task", table_text)
 
     def test_list_completed_modes(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        data_arg = f"--storage-uri={self.temp_json_uri}"
+        storage = JsonStorage(self.temp_json_uri)
         storage.append_task(Task(title="Pending task"))
         t_done = Task(title="Done task")
         storage.append_task(t_done)
@@ -420,8 +402,8 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(len(json.loads(f_mode_all.getvalue())), 2)
 
     def test_list_status_filter_direct(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        data_arg = f"--storage-uri={self.temp_json_uri}"
+        storage = JsonStorage(self.temp_json_uri)
         storage.append_task(Task(title="Task 1"))
         t_done = Task(title="Task 2")
         storage.append_task(t_done)
@@ -438,7 +420,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_task_storage_isolated(self) -> None:
         task_dir = Path(self.temp_dir) / "tasks_only"
-        ts = JsonTaskStorage(settings=Settings(data_dir=task_dir), lock=StorageLock(lock_file=(task_dir / '.lock')))
+        ts = JsonTaskStorage(task_dir, lock=StorageLock(lock_file=(task_dir / '.lock')))
 
         # Ensure only tasks.json was created
         self.assertTrue((task_dir / "tasks.json").exists())
@@ -462,7 +444,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_recurrence_storage_isolated(self) -> None:
         rec_dir = Path(self.temp_dir) / "rec_only"
-        rs = JsonRecurrenceRuleStorage(settings=Settings(data_dir=rec_dir), lock=StorageLock(lock_file=(rec_dir / '.lock')))
+        rs = JsonRecurrenceRuleStorage(rec_dir, lock=StorageLock(lock_file=(rec_dir / '.lock')))
 
         # Ensure only recurrence_rules.json was created
         self.assertTrue((rec_dir / "recurrence_rules.json").exists())
@@ -496,7 +478,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_history_storage_isolated(self) -> None:
         hist_dir = Path(self.temp_dir) / "hist_only"
-        hs = JsonHistoryStorage(settings=Settings(data_dir=hist_dir), lock=StorageLock(lock_file=(hist_dir / '.lock')))
+        hs = JsonHistoryStorage(hist_dir, lock=StorageLock(lock_file=(hist_dir / '.lock')))
 
         # Ensure only states_history.json was created
         self.assertTrue((hist_dir / "states_history.json").exists())
@@ -536,16 +518,17 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertTrue(issubclass(JsonHistoryStorage, PlainStateHistoryStorageProto))
         self.assertTrue(issubclass(JsonStorage, PlainStorageProto))
 
-        storage = JsonStorage(Settings(data_dir=self.data_dir))
+        storage = JsonStorage(self.temp_json_uri)
         self.assertIsInstance(storage, PlainStorageProto)
 
-    def test_cli_storage_type_argument(self) -> None:
-        data_arg = f"--data-dir={self.data_dir}"
-        f_out = io.StringIO()
-        with patch("sys.stdout", f_out):
-            code = main([data_arg, "--storage-type=json", "add", "CLI storage type task"])
-        self.assertEqual(code, 0)
-        self.assertIn("Task created:", f_out.getvalue())
+    # TODO: ??
+    # def test_cli_storage_type_argument(self) -> None:
+    #     data_arg = f"--data-dir={self.data_dir}"
+    #     f_out = io.StringIO()
+    #     with patch("sys.stdout", f_out):
+    #         code = main([data_arg, "--storage-type=json", "add", "CLI storage type task"])
+    #     self.assertEqual(code, 0)
+    #     self.assertIn("Task created:", f_out.getvalue())
 
 
 if __name__ == "__main__":

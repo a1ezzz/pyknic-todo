@@ -7,16 +7,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from .settings import Settings
 from .storage.proto import (
     ToDoStorageProto,
 )
 
 from .storage.storage import (
-    StorageFactory,
+    storage_factory,
 )
 
 from .models import (
@@ -29,27 +27,45 @@ from .models import (
     EndCondition
 )
 
+from pyknic.lib.uri import URI
 
-def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParser:
-    if settings is None:
-        settings = Settings()
+# TODO: replace cli with settings!
+# data_dir: Path = Field(
+#     default=Path("./data"),
+#     validation_alias=AliasChoices(
+#         "PYKNIC_TODO_DATA_DIR", "TODO_DATA_DIR", "data_dir"
+#     ),
+#     description="Directory to store JSON data",
+# )
+
+
+def create_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="pyknic-todo",
         description="pyknic-todo: Simple CLI utility for todo task management",
     )
+
     parser.add_argument(
-        "--data-dir",
-        dest="data_dir",
-        default=None,
-        help=f"Directory to store JSON data (defaults to {settings.data_dir} or $PYKNIC_TODO_DATA_DIR)",
+        "--storage-uri",
+        dest="storage_uri",
+        required=True  # TODO: set something to default!
+        # TODO: update help!
+        # help=f"Directory to store JSON data (defaults to {settings.data_dir} or $PYKNIC_TODO_DATA_DIR)",
     )
-    parser.add_argument(
-        "--storage-type",
-        dest="storage_type",
-        default=None,
-        help=f"Storage backend type (defaults to {settings.storage_type} or $PYKNIC_TODO_STORAGE_TYPE)",
-    )
+
+    # parser.add_argument(
+    #     "--data-dir",
+    #     dest="data_dir",
+    #     default=None,
+    #     help=f"Directory to store JSON data (defaults to {settings.data_dir} or $PYKNIC_TODO_DATA_DIR)",
+    # )
+    # parser.add_argument(
+    #     "--storage-type",
+    #     dest="storage_type",
+    #     default=None,
+    #     help=f"Storage backend type (defaults to {settings.storage_type} or $PYKNIC_TODO_STORAGE_TYPE)",
+    # )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -60,18 +76,15 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     add_parser.add_argument(
         "-p",
         "--priority",
-        default=settings.default_priority,
+        default=TaskPriority.medium,
         choices=sorted([
             x.value for x in TaskPriority
         ]),
-        help=f"Task priority (default: {settings.default_priority})",
     )
     add_parser.add_argument(
         "-s",
         "--status",
-        default=settings.default_status,
         choices=sorted([x.value for x in TaskStatus]),
-        help=f"Initial task status (default: {settings.default_status})",
     )
     add_parser.add_argument("--due", "--due-date", dest="due_date", default=None, help="Due date (ISO format)")
     add_parser.add_argument(
@@ -185,7 +198,7 @@ def create_parser(settings: Optional[Settings] = None) -> argparse.ArgumentParse
     return parser
 
 
-def handle_add(settings: Settings, storage: ToDoStorageProto, args: argparse.Namespace) -> int:
+def handle_add(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
     tags: list[str] = []
     if args.tags:
         for t in args.tags:
@@ -197,7 +210,7 @@ def handle_add(settings: Settings, storage: ToDoStorageProto, args: argparse.Nam
     task = Task(
         title=args.title,
         description=args.description,
-        priority=TaskPriority(args.priority or settings.default_priority),
+        priority=TaskPriority(args.priority) if args.priority else TaskPriority.medium, 
         due_date=args.due_date,
         tags=tags,
         project=args.project,
@@ -304,40 +317,18 @@ def handle_list(storage: ToDoStorageProto, args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_config(settings: Settings, args: argparse.Namespace) -> int:
-    if args.json:
-        print(settings.model_dump_json(indent=2))
-        return 0
-
-    print(f"data_dir: {settings.data_dir}")
-    print(f"storage_type: {settings.storage_type}")
-    print(f"schema_version: {settings.schema_version}")
-    print(f"client_id_prefix: {settings.client_id_prefix}")
-    print(f"default_priority: {settings.default_priority}")
-    print(f"default_status: {settings.default_status}")
-    return 0
-
-
 def main(
     argv: Optional[Sequence[str]] = None,
-    settings: Optional[Settings] = None,
 ) -> int:
-    if settings is None:
-        settings = Settings()
 
-    parser = create_parser(settings=settings)
+    parser = create_parser()
     args = parser.parse_args(argv)
 
-    if args.data_dir:
-        settings = settings.model_copy(update={"data_dir": Path(args.data_dir)})
-    if getattr(args, "storage_type", None):
-        settings = settings.model_copy(update={"storage_type": args.storage_type})
-
-    storage = StorageFactory[settings.storage_type](settings=settings)
+    storage = storage_factory(URI.parse(args.storage_uri))
 
     try:
         if args.command == "add":
-            return handle_add(settings, storage, args)
+            return handle_add(storage, args)
         elif args.command == "status":
             return handle_status(storage, args)
         elif args.command == "done":
@@ -346,8 +337,6 @@ def main(
             return handle_repeat(storage, args)
         elif args.command == "list":
             return handle_list(storage, args)
-        elif args.command == "config":
-            return handle_config(settings, args)
         else:
             parser.print_help()
             return 1

@@ -4,6 +4,8 @@ import threading
 import typing
 import uuid
 
+from pyknic.lib.uri import URI
+
 from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent
 
 from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
@@ -124,3 +126,7 @@ class InMemoryStorage(PlainStorageProto):
 
     def _history(self) -> PlainStateHistoryStorageProto:
         return self.__hs
+
+    @classmethod
+    def create_storage(cls, storage_uri: URI) -> 'PlainStorageProto':
+        return cls()
