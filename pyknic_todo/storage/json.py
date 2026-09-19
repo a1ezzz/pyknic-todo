@@ -34,12 +34,12 @@ import pydantic
 from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskStatus
+from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskStatus, ToDoStorageSettings
 
 from .helpers import exact_one_task, partial_uuid_select
 
 from .plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto, PlainStateHistoryStorageProto
-from .plain import PlainRecurrenceRuleStorageProto, PlainStorageProto
+from .plain import PlainRecurrenceRuleStorageProto, PlainStorageProto, PlainSettingsStorageProto
 
 from .storage import __storage_registry__
 
@@ -51,7 +51,7 @@ class JsonFile(enum.Enum):
     tasks = "tasks.json"                        # file that stores :class:`.Task` objects
     recurrence_rules = "recurrence_rules.json"  # file that stores :class:`.RecurrenceRule` objects
     states_history = "states_history.json"      # file that stores :class:`.StateHistoryEvent` objects
-    # TODO: add settings with client_id!
+    settings = "settings.json"                  # file that stores :class:`.ToDoStorageSettings` object
 
 
 @enum.unique
@@ -60,6 +60,7 @@ class JsonFileModels(enum.Enum):
     tasks = Task
     recurrence_rules = RecurrenceRule
     states_history = StateHistoryEvent
+    settings = ToDoStorageSettings
 
 
 class StorageLock:
@@ -129,7 +130,7 @@ class _BaseJsonEntityStorage:
         self.__file_path = data_dir / str(self.__file_type.value)
 
         self.__lock_manager = lock
-        self.__ensure_file()
+        self._ensure_file()
 
     def _read_json[T](self) -> typing.List[T]:
         """ Read, parse and return list of inner objects"""
@@ -182,7 +183,25 @@ class _BaseJsonEntityStorage:
                 f.write(self.__serialize(data))
                 f.write("\n")
 
-    def __ensure_file(self) -> None:
+    def _write_single_obj_json(self, obj: pydantic.BaseModel) -> None:
+        """Replace a file with a new object.
+
+        :param obj: a new object to save
+        """
+
+        with self.__lock_manager.lock():
+            with open(self.__file_path, "w", encoding="utf-8") as f:
+                f.write(obj.model_dump_json())
+
+    def _read_single_obj_json(self) -> pydantic.BaseModel:
+        """Read an object."""
+
+        with self.__lock_manager.lock():
+            with open(self.__file_path, "r", encoding="utf-8") as f:
+                file_data = f.read()
+                return self.__model_cls.model_validate_json(file_data)  # type: ignore[no-any-return]
+
+    def _ensure_file(self) -> None:
         """Check if there is a file and create an empty one if the file doesn't exist
         """
 
@@ -203,12 +222,14 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
 
         def __init__(
             self,
+            storage_id: uuid.UUID,
             storage: PlainTaskStorageProto,
             task_id_query: typing.Union[uuid.UUID, str],
             query_full_match: bool = True
         ):
             """Create a new context manager
 
+            :param storage_id: idenitifies a storage that applies task changes
             :param storage: original tasks storage
             :param task_id_query: a task identifier (a partial uuid submittion is supported when
             the "query_full_match" argument is False)
@@ -216,6 +237,7 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
             """
 
             TaskStorageUpdaterContextProto.__init__(self)
+            self.__storage_id = storage_id
             self.__storage = storage
             self.__all_tasks = self.__storage.load_tasks()
             self.__task = exact_one_task(self.__all_tasks, task_id_query, query_full_match=query_full_match)
@@ -228,15 +250,18 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         def commit(self) -> None:
             """:meth:`.TaskStorageUpdaterContextProto.commit` implementation
             """
+            self.__task.storage_origin = self.__storage_id
             self.__storage.save_tasks(self.__all_tasks)
 
     def __init__(
         self,
+        storage_id: uuid.UUID,
         data_dir: pathlib.Path,
         lock: StorageLock,
     ) -> None:
         """ Create a new task storage
 
+        :param storage_id: idenitifies a storage this substorage is related to
         :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
         """
@@ -248,6 +273,8 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
             file_type=JsonFile.tasks,
             lock=lock,
         )
+
+        self.__storage_id = storage_id
 
     def load_tasks(self) -> typing.List[Task]:
         """ :meth:`.PlainTaskStorageProto.load_tasks` method implementation
@@ -266,11 +293,12 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
     ) -> TaskStorageUpdaterContextProto:
         """ :meth:`.PlainTaskStorageProto.updater_context` method implementation
         """
-        return JsonTaskStorage.UpdaterContext(self, id_query, query_full_match=query_full_match)
+        return JsonTaskStorage.UpdaterContext(self.__storage_id, self, id_query, query_full_match=query_full_match)
 
     def append_task(self, task: Task) -> None:
         """ :meth:`.PlainTaskStorageProto.append_task` method implementation
         """
+        task.storage_origin = self.__storage_id
         self._append_json(task)
 
 
@@ -317,11 +345,13 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
 
     def __init__(
         self,
+        storage_id: uuid.UUID,
         data_dir: pathlib.Path,
         lock: StorageLock,
     ) -> None:
         """ Create a new state-history storage
 
+        :param storage_id: idenitifies a storage this substorage is related to
         :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
         """
@@ -333,6 +363,8 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
             file_type=JsonFile.states_history,
             lock=lock,
         )
+
+        self.__storage_id = storage_id
 
     def load_history(self) -> typing.List[StateHistoryEvent]:
         """ :meth:`.PlainStateHistoryStorageProto.load_history` method implementation
@@ -356,7 +388,46 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
     def record_history_event(self, event: StateHistoryEvent) -> None:
         """ :meth:`.PlainStateHistoryStorageProto.record_history_event` method implementation
         """
+        event.storage_origin = self.__storage_id
         self._append_json(event)
+
+
+class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
+    """Storage that saves :class:`.ToDoStorageSettings` object"""
+
+    def __init__(
+        self,
+        data_dir: pathlib.Path,
+        lock: StorageLock,
+    ) -> None:
+        """ Create a new state-history storage
+
+        :param data_dir: absolute path to a directory where a storage file should be created
+        :param lock: exclusive I/O lock
+        """
+
+        PlainSettingsStorageProto.__init__(self)
+        _BaseJsonEntityStorage.__init__(
+            self,
+            data_dir=data_dir,
+            file_type=JsonFile.settings,
+            lock=lock,
+        )
+
+        self.__settings: ToDoStorageSettings = self._read_single_obj_json()  # type: ignore[assignment]
+
+    def storage_id(self) -> uuid.UUID:
+        """ :meth:`.PlainSettingsStorageProto.storage_id` method implementation
+        """
+        return self.__settings.id
+
+    def _ensure_file(self) -> None:
+        """ This overriden :meth:`._BaseJsonEntityStorage._ensure_file` method that writes settings defaults
+        """
+        default_settings = ToDoStorageSettings(
+            comment="JSON-file storage"
+        )
+        self._write_single_obj_json(default_settings)
 
 
 __json_storage_scheme__ = 'json+file'
@@ -387,9 +458,10 @@ class JsonStorage(PlainStorageProto):
 
         self.__lock = StorageLock(lock_file=(self.__data_dir / ".lock"))
 
-        self.__ts = JsonTaskStorage(self.__data_dir, lock=self.__lock)
+        self.__se = JsonSettingsStorage(self.__data_dir, lock=self.__lock)
+        self.__ts = JsonTaskStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
         self.__rs = JsonRecurrenceRuleStorage(self.__data_dir, lock=self.__lock)
-        self.__hs = JsonHistoryStorage(self.__data_dir, lock=self.__lock)
+        self.__hs = JsonHistoryStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
 
     def _tasks(self) -> JsonTaskStorage:
         """ :meth:`.PlainStorageProto._tasks` method implementation
@@ -405,6 +477,11 @@ class JsonStorage(PlainStorageProto):
         """ :meth:`.PlainStorageProto._history` method implementation
         """
         return self.__hs
+
+    def _settings(self) -> JsonSettingsStorage:
+        """ :meth:`.PlainStorageProto._settings` method implementation
+        """
+        return self.__se
 
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'JsonStorage':

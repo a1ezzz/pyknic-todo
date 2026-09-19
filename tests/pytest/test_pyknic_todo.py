@@ -420,7 +420,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_task_storage_isolated(self) -> None:
         task_dir = Path(self.temp_dir) / "tasks_only"
-        ts = JsonTaskStorage(task_dir, lock=StorageLock(lock_file=(task_dir / '.lock')))
+        ts = JsonTaskStorage(uuid.uuid4(), task_dir, lock=StorageLock(lock_file=(task_dir / '.lock')))
 
         # Ensure only tasks.json was created
         self.assertTrue((task_dir / "tasks.json").exists())
@@ -478,7 +478,7 @@ class TestPyknicTodo(unittest.TestCase):
 
     def test_history_storage_isolated(self) -> None:
         hist_dir = Path(self.temp_dir) / "hist_only"
-        hs = JsonHistoryStorage(hist_dir, lock=StorageLock(lock_file=(hist_dir / '.lock')))
+        hs = JsonHistoryStorage(uuid.uuid4(), hist_dir, lock=StorageLock(lock_file=(hist_dir / '.lock')))
 
         # Ensure only states_history.json was created
         self.assertTrue((hist_dir / "states_history.json").exists())

@@ -40,7 +40,16 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
     @classmethod
     @abc.abstractmethod
     def create_storage(cls, storage_uri: URI) -> 'ToDoStorageProto':
-        # TODO: docs + test
+        """Create a new storage by URI
+
+        :param storage_uri: URI defines storage settings
+        """
+        raise NotImplementedError('This method is abstract')
+
+    @abc.abstractmethod
+    def storage_id(self) -> uuid.UUID:
+        """ Return this storage identifier
+        """
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod

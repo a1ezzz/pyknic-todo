@@ -51,8 +51,12 @@ class RecurrenceEndCondtionType(enum.Enum):
     count = "count"
 
 
+class ToDoStorageSettings(BaseModel):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    comment: str = ""
+
+
 class EndCondition(BaseModel):
-    # TODO: make a note about the val_temporal_unit
 
     # TODO: rename!
 
@@ -64,7 +68,6 @@ class EndCondition(BaseModel):
 
 
 class RecurrenceRule(BaseModel):
-    # TODO: make a note about the val_temporal_unit
     # TODO: rename!
 
     model_config = ConfigDict(validate_assignment=True, extra='forbid', frozen=True, val_temporal_unit='seconds')
@@ -77,11 +80,8 @@ class RecurrenceRule(BaseModel):
 
 
 class Task(BaseModel):
-    # TODO: make a note about the val_temporal_unit
 
     # TODO: rename this class
-
-    # actor_client_id: str  # TODO: client_id should be persistent somewhere! And add created_on!
 
     model_config = ConfigDict(validate_assignment=True, extra='forbid', val_temporal_unit='seconds')
 
@@ -98,20 +98,17 @@ class Task(BaseModel):
     updated_at: datetime = Field(default_factory=todo_models_now)
     completed_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
+    storage_origin: Optional[uuid.UUID] = None
 
 
 class StateHistoryEvent(BaseModel):
-    # TODO: make a note about the val_temporal_unit
-
     # TODO: rename this class
-
-    # TODO: set status the same as Settings default is
 
     model_config = ConfigDict(validate_assignment=True, extra='forbid', val_temporal_unit='seconds')
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     task_id: uuid.UUID
     created_at: datetime = Field(default_factory=todo_models_now)
-    # actor_client_id: str  # TODO: client_id should be persistent somewhere!
     next_state: TaskStatus
-    comment: str = ""  # TODO: checkout usage
+    comment: str = ""
+    storage_origin: Optional[uuid.UUID] = None

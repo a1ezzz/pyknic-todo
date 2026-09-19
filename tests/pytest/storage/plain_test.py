@@ -8,7 +8,7 @@ from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStat
 
 from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
-from pyknic_todo.storage.plain import PlainStorageProto
+from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto
 
 from fixtures.test_storage import InMemoryStorage
 
@@ -40,10 +40,14 @@ def test_abstract() -> None:
     with pytest.raises(NotImplementedError):
         PlainStateHistoryStorageProto.record_history_event(None, None)  # type: ignore[arg-type]
 
+    pytest.raises(TypeError, PlainSettingsStorageProto)
+    pytest.raises(NotImplementedError, PlainSettingsStorageProto.storage_id, None)  # type: ignore[call-overload]
+
     pytest.raises(TypeError, PlainStorageProto)
     pytest.raises(NotImplementedError, PlainStorageProto._tasks, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, PlainStorageProto._recurrence_rules, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, PlainStorageProto._history, None)  # type: ignore[call-overload]
+    pytest.raises(NotImplementedError, PlainStorageProto._settings, None)  # type: ignore[call-overload]
 
 
 class TestPlainStorageProto:

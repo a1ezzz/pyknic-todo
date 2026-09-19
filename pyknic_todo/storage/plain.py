@@ -158,6 +158,16 @@ class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
         raise ValueError(f'Task id "{task_id_query}" was not found')
 
 
+class PlainSettingsStorageProto(metaclass=abc.ABCMeta):
+    """Abstract interface for state history storage backends."""
+
+    @abc.abstractmethod
+    def storage_id(self) -> uuid.UUID:
+        """ Return this storage identifier
+        """
+        raise NotImplementedError('This method is abstract')
+
+
 class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
 
@@ -175,6 +185,15 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     def _history(self) -> PlainStateHistoryStorageProto:
         """History storage component."""
         raise NotImplementedError('This method is abstract')
+
+    @abc.abstractmethod
+    def _settings(self) -> PlainSettingsStorageProto:
+        """Settings storage component."""
+        raise NotImplementedError('This method is abstract')
+
+    def storage_id(self) -> uuid.UUID:
+        """:meth:`.ToDoStorageProto.storage_id` implementation."""
+        return self._settings().storage_id()
 
     def load_tasks(self) -> list[Task]:
         """:meth:`.ToDoStorageProto.load_tasks` implementation."""

@@ -6,11 +6,11 @@ import uuid
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent
+from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, ToDoStorageSettings
 
 from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
-from pyknic_todo.storage.plain import PlainStorageProto
+from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto
 
 from pyknic_todo.storage.helpers import exact_one_task
 
@@ -98,6 +98,16 @@ class InMemoryHistoryStorage(PlainStateHistoryStorageProto):
         self.__storage.append(event)
 
 
+class InMemorySettingsStorage(PlainSettingsStorageProto):
+
+    def __int__(self) -> None:
+        PlainSettingsStorageProto.__init__(self)
+        self.__settings = ToDoStorageSettings(comment='InMemory storage')
+
+    def storage_id(self) -> uuid.UUID:
+        return self.__settings.id
+
+
 class InMemoryStorage(PlainStorageProto):
 
     def __init__(self) -> None:
@@ -107,6 +117,7 @@ class InMemoryStorage(PlainStorageProto):
         self.__ts = InMemoryTaskStorage()
         self.__rs = InMemoryRuleStorage()
         self.__hs = InMemoryHistoryStorage()
+        self.__se = InMemorySettingsStorage()
 
     @contextlib.contextmanager
     def lock(self, exclusive: bool = True, blocking: bool = True) -> typing.Generator[None, None, None]:
@@ -126,6 +137,9 @@ class InMemoryStorage(PlainStorageProto):
 
     def _history(self) -> PlainStateHistoryStorageProto:
         return self.__hs
+
+    def _settings(self) -> PlainSettingsStorageProto:
+        return self.__se
 
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'PlainStorageProto':

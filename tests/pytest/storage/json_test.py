@@ -48,7 +48,8 @@ class TestStorageLock:
 class TestJsonTaskStorage:
 
     def test(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        storage_id = uuid.uuid4()
+        ts = JsonTaskStorage(storage_id, tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
         assert(isinstance(ts, PlainTaskStorageProto))
 
         assert((tmp_path / JsonFile.tasks.value).exists() is True)
@@ -66,8 +67,17 @@ class TestJsonTaskStorage:
             description="Details",
             priority=TaskPriority("low"),
         )
+
+        assert(task1.storage_origin is None)
+        assert(task2.storage_origin is None)
+
         ts.append_task(task1)
+        assert(task1.storage_origin == storage_id)
+        assert(task2.storage_origin is None)
+
         ts.append_task(task2)
+        assert(task1.storage_origin == storage_id)
+        assert(task2.storage_origin == storage_id)
 
         tasks = ts.load_tasks()
         assert(len(tasks) == 2)
@@ -83,7 +93,7 @@ class TestJsonTaskStorage:
         assert(tasks[0].priority == TaskPriority("low"))
 
     def test_context(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        ts = JsonTaskStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task = Task(
             title="Isolated task",
@@ -119,7 +129,7 @@ class TestJsonTaskStorage:
         assert(tasks[0].tags == ["foo"])
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        ts = JsonTaskStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task_description = """The GNU General Public License is a free, copyleft license for...
 
@@ -170,7 +180,9 @@ class TestJsonRecurrenceRuleStorage:
 class TestJsonHistoryStorage:
 
     def test(self, tmp_path: pathlib.Path) -> None:
-        hs = JsonHistoryStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        storage_id = uuid.uuid4()
+
+        hs = JsonHistoryStorage(storage_id, tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
         assert(isinstance(hs, PlainStateHistoryStorageProto))
 
         assert((tmp_path / JsonFile.tasks.value).exists() is False)
@@ -189,16 +201,23 @@ class TestJsonHistoryStorage:
             next_state=TaskStatus.done
         )
 
+        assert(state1.storage_origin is None)
+        assert(state2.storage_origin is None)
+
         hs.record_history_event(state1)
+        assert(state1.storage_origin == storage_id)
+        assert(state2.storage_origin is None)
         assert(hs.load_history() == [state1])
         assert(hs.task_latest_status(task_id) == TaskStatus.in_progress)
 
         hs.record_history_event(state2)
+        assert(state1.storage_origin == storage_id)
+        assert(state2.storage_origin == storage_id)
         assert(hs.load_history() == [state1, state2])
         assert(hs.task_latest_status(task_id) == TaskStatus.done)
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
-        hs = JsonHistoryStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        hs = JsonHistoryStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
 
         task_id = uuid.uuid4()  # there is no check for a task existance
 
@@ -246,7 +265,9 @@ class TestJsonStorage:
             tags=["iso"],
         )
 
+        assert(task.storage_origin is None)
         s.append_task(task)
+        assert(task.storage_origin == s.storage_id())
         assert(s.set_task_status(task.id, TaskStatus.cancelled))
         assert(s.task_status(str(task.id)[:8]) == TaskStatus.cancelled)
 
