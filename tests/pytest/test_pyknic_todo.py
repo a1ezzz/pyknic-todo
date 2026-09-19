@@ -14,7 +14,7 @@ from unittest.mock import patch
 from pyknic.lib.uri import URI
 
 from pyknic_todo.cli import main
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskPriority, RecurrenceEndCondtionType, RecurrenceScheduleType, EndCondition, TaskStatus
+from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, TaskPriority, EndCondtionType, RecurrenceScheduleType, EndCondition, TaskStatus
 from pyknic_todo.storage.json import __json_storage_scheme__
 
 from pyknic_todo.storage.json import (
@@ -114,7 +114,7 @@ class TestPyknicTodo(unittest.TestCase):
             schedule_type=RecurrenceScheduleType.rrule,
             schedule_expression="FREQ=WEEKLY;BYDAY=MO",
             end_condition=EndCondition(
-                condition_type=RecurrenceEndCondtionType.count,
+                condition_type=EndCondtionType.count,
                 max_occurrences=5,
             )
         )
@@ -124,7 +124,7 @@ class TestPyknicTodo(unittest.TestCase):
         self.assertEqual(updated_task.recurrence_rule_id, rule.id)
         self.assertEqual(rule.schedule_type, RecurrenceScheduleType.rrule)
         self.assertEqual(rule.schedule_expression, "FREQ=WEEKLY;BYDAY=MO")
-        self.assertEqual(rule.end_condition.condition_type, RecurrenceEndCondtionType.count)
+        self.assertEqual(rule.end_condition.condition_type, EndCondtionType.count)
         self.assertEqual(rule.end_condition.max_occurrences, 5)
 
     def test_cli_end_to_end(self) -> None:
@@ -456,14 +456,14 @@ class TestPyknicTodo(unittest.TestCase):
             schedule_type=RecurrenceScheduleType.rrule,
             schedule_expression="FREQ=DAILY",
             end_condition=EndCondition(
-                condition_type=RecurrenceEndCondtionType.count,
+                condition_type=EndCondtionType.count,
                 max_occurrences=5,
             )
         )
         rs.append_recurrence_rule(rule)
         self.assertEqual(rule.schedule_type, RecurrenceScheduleType.rrule)
         self.assertEqual(rule.schedule_expression, "FREQ=DAILY")
-        self.assertEqual(rule.end_condition.condition_type, RecurrenceEndCondtionType.count)
+        self.assertEqual(rule.end_condition.condition_type, EndCondtionType.count)
         self.assertEqual(rule.end_condition.max_occurrences, 5)
 
         # Read rules
@@ -487,7 +487,7 @@ class TestPyknicTodo(unittest.TestCase):
 
         # Record event
         new_uid = uuid.uuid4()
-        event = StateHistoryEvent(
+        event = StateUpdatedEvent(
             task_id=new_uid,
             next_state=TaskStatus.in_progress,
             comment="Started work",
@@ -509,7 +509,7 @@ class TestPyknicTodo(unittest.TestCase):
         # Model representation
         event_models = hs.load_history()
         self.assertEqual(len(event_models), 1)
-        self.assertIsInstance(event_models[0], StateHistoryEvent)
+        self.assertIsInstance(event_models[0], StateUpdatedEvent)
         self.assertEqual(event_models[0].task_id, new_uid)
 
     def test_abstract_interfaces_and_json_subclasses(self) -> None:

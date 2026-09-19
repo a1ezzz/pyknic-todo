@@ -34,7 +34,7 @@ import pydantic
 from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import RecurrenceRule, StateHistoryEvent, Task, TaskStatus, ToDoStorageSettings
+from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, TaskStatus, ToDoStorageSettings
 
 from .helpers import exact_one_task, partial_uuid_select
 
@@ -50,7 +50,7 @@ class JsonFile(enum.Enum):
 
     tasks = "tasks.json"                        # file that stores :class:`.Task` objects
     recurrence_rules = "recurrence_rules.json"  # file that stores :class:`.RecurrenceRule` objects
-    states_history = "states_history.json"      # file that stores :class:`.StateHistoryEvent` objects
+    states_history = "states_history.json"      # file that stores :class:`.StateUpdatedEvent` objects
     settings = "settings.json"                  # file that stores :class:`.ToDoStorageSettings` object
 
 
@@ -59,7 +59,7 @@ class JsonFileModels(enum.Enum):
     """Models that are stored in files."""
     tasks = Task
     recurrence_rules = RecurrenceRule
-    states_history = StateHistoryEvent
+    states_history = StateUpdatedEvent
     settings = ToDoStorageSettings
 
 
@@ -341,7 +341,7 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
 
 
 class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
-    """Storage that saves :class:`.StateHistoryEvent` objects"""
+    """Storage that saves :class:`.StateUpdatedEvent` objects"""
 
     def __init__(
         self,
@@ -366,12 +366,12 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
 
         self.__storage_id = storage_id
 
-    def load_history(self) -> typing.List[StateHistoryEvent]:
+    def load_history(self) -> typing.List[StateUpdatedEvent]:
         """ :meth:`.PlainStateHistoryStorageProto.load_history` method implementation
         """
         return self._read_json()
 
-    def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> typing.List[StateHistoryEvent]:
+    def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> typing.List[StateUpdatedEvent]:
         """ :meth:`.PlainStateHistoryStorageProto.find_events_for_task` method implementation
         """
         return [e for e in self.load_history() if partial_uuid_select(e.task_id, task_id_query)]
@@ -385,7 +385,7 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
 
         raise ValueError(f'Task id "{task_id_query}" was not found')
 
-    def record_history_event(self, event: StateHistoryEvent) -> None:
+    def record_history_event(self, event: StateUpdatedEvent) -> None:
         """ :meth:`.PlainStateHistoryStorageProto.record_history_event` method implementation
         """
         event.storage_origin = self.__storage_id

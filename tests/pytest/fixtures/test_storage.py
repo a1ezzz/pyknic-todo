@@ -6,7 +6,7 @@ import uuid
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, ToDoStorageSettings
+from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, ToDoStorageSettings
 
 from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
@@ -89,12 +89,12 @@ class InMemoryHistoryStorage(PlainStateHistoryStorageProto):
 
     def __init__(self) -> None:
         PlainStateHistoryStorageProto.__init__(self)
-        self.__storage: typing.List[StateHistoryEvent] = []
+        self.__storage: typing.List[StateUpdatedEvent] = []
 
-    def load_history(self) -> typing.List[StateHistoryEvent]:
+    def load_history(self) -> typing.List[StateUpdatedEvent]:
         return self.__storage.copy()
 
-    def record_history_event(self, event: StateHistoryEvent) -> None:
+    def record_history_event(self, event: StateUpdatedEvent) -> None:
         self.__storage.append(event)
 
 

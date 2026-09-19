@@ -26,7 +26,7 @@ import types
 import typing
 import uuid
 
-from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateHistoryEvent, todo_models_now
+from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateUpdatedEvent, todo_models_now
 
 from .proto import ToDoStorageProto
 from .helpers import partial_uuid_select
@@ -126,19 +126,19 @@ class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for state history storage backends."""
 
     @abc.abstractmethod
-    def load_history(self) -> list[StateHistoryEvent]:
+    def load_history(self) -> list[StateUpdatedEvent]:
         """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def record_history_event(self, event: StateHistoryEvent) -> None:
+    def record_history_event(self, event: StateUpdatedEvent) -> None:
         """Record a state change event.
 
         :param event: a new event to save
         """
         raise NotImplementedError('This method is abstract')
 
-    def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> list[StateHistoryEvent]:
+    def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> list[StateUpdatedEvent]:
         """Find history events for a given task ID.
 
         :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
@@ -211,11 +211,11 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         """:meth:`.ToDoStorageProto.save_recurrence_rules` implementation."""
         self._recurrence_rules().save_recurrence_rules(rules)
 
-    def load_history(self) -> list[StateHistoryEvent]:
+    def load_history(self) -> list[StateUpdatedEvent]:
         """:meth:`.ToDoStorageProto.load_history` implementation."""
         return self._history().load_history()
 
-    def record_history_event(self, event: StateHistoryEvent) -> None:
+    def record_history_event(self, event: StateUpdatedEvent) -> None:
         """:meth:`.ToDoStorageProto.record_history_event` implementation."""
         self._history().record_history_event(event)
 
@@ -225,7 +225,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         self._tasks().append_task(task)
 
         self._history().record_history_event(
-            StateHistoryEvent(
+            StateUpdatedEvent(
                 task_id=task.id,
                 next_state=TaskStatus.new,
             )
@@ -272,7 +272,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
                 tc.commit()
 
             self._history().record_history_event(
-                StateHistoryEvent(
+                StateUpdatedEvent(
                     task_id=task.id,
                     next_state=TaskStatus(new_status),
                     comment=comment or ""

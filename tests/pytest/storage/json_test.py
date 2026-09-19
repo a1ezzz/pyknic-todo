@@ -8,8 +8,8 @@ import pytest
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, TaskPriority, RecurrenceRule, RecurrenceScheduleType, RecurrenceEndCondtionType
-from pyknic_todo.models import EndCondition, TaskStatus, StateHistoryEvent
+from pyknic_todo.models import Task, TaskPriority, RecurrenceRule, RecurrenceScheduleType, EndCondtionType
+from pyknic_todo.models import EndCondition, TaskStatus, StateUpdatedEvent
 
 from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainRecurrenceRuleStorageProto
 from pyknic_todo.storage.plain import PlainStateHistoryStorageProto, PlainStorageProto
@@ -158,7 +158,7 @@ class TestJsonRecurrenceRuleStorage:
             schedule_type=RecurrenceScheduleType.rrule,
             schedule_expression="FREQ=DAILY",
             end_condition=EndCondition(
-                condition_type=RecurrenceEndCondtionType.count,
+                condition_type=EndCondtionType.count,
                 max_occurrences=5
             )
         )
@@ -191,12 +191,12 @@ class TestJsonHistoryStorage:
 
         task_id = uuid.uuid4()  # there is no check for a task existance
 
-        state1 = StateHistoryEvent(
+        state1 = StateUpdatedEvent(
             task_id=task_id,
             next_state=TaskStatus.in_progress
         )
 
-        state2 = StateHistoryEvent(
+        state2 = StateUpdatedEvent(
             task_id=task_id,
             next_state=TaskStatus.done
         )
@@ -225,7 +225,7 @@ class TestJsonHistoryStorage:
 
         The licenses for most software and other practical works are designed to take away your..."""
 
-        state1 = StateHistoryEvent(
+        state1 = StateUpdatedEvent(
             task_id=task_id,
             next_state=TaskStatus.in_progress,
             comment=state_comment

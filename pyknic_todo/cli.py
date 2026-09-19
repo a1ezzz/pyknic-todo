@@ -18,7 +18,7 @@ from .storage.storage import (
 )
 
 from .models import (
-    RecurrenceEndCondtionType,
+    EndCondtionType,
     RecurrenceScheduleType,
     Task,
     TaskPriority,
@@ -131,7 +131,7 @@ def create_parser() -> argparse.ArgumentParser:
     repeat_parser.add_argument(
         "--end-type",
         default="never",
-        choices=sorted([x.value for x in RecurrenceEndCondtionType]),
+        choices=sorted([x.value for x in EndCondtionType]),
         help="Recurrence end condition type (default: never)",
     )
     repeat_parser.add_argument("--until", dest="until_date", default=None, help="Until date (ISO format)")

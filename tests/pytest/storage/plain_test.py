@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from pyknic_todo.storage.proto import ToDoStorageProto
-from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStatus, RecurrenceScheduleType
+from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus, RecurrenceScheduleType
 
 from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
@@ -103,12 +103,12 @@ class TestPlainStorageProto:
 
         storage = InMemoryStorage()
 
-        event1 = StateHistoryEvent(
+        event1 = StateUpdatedEvent(
             task_id=uuid.uuid4(),
             next_state=TaskStatus.in_progress
         )
 
-        event2 = StateHistoryEvent(
+        event2 = StateUpdatedEvent(
             task_id=uuid.uuid4(),
             next_state=TaskStatus.done
         )

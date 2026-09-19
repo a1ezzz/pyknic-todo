@@ -25,7 +25,7 @@ import uuid
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, RecurrenceRule, StateHistoryEvent, TaskStatus
+from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus
 
 
 class ToDoStorageProto(metaclass=abc.ABCMeta):
@@ -77,11 +77,11 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         # TODO: pretty rough method. Should be replaced in a future with more specific functions
         raise NotImplementedError('This method is abstract')
 
-    def load_history(self) -> list[StateHistoryEvent]:
+    def load_history(self) -> list[StateUpdatedEvent]:
         """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
-    def record_history_event(self, event: StateHistoryEvent) -> None:
+    def record_history_event(self, event: StateUpdatedEvent) -> None:
         """Record a state change event.
 
         :param event: a new event to save
