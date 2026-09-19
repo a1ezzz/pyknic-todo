@@ -226,7 +226,7 @@ class TestJsonStorage:
     def test(self, json_tmp_uri: URI) -> None:
         assert(json_tmp_uri.path)
 
-        s = JsonStorage(json_tmp_uri)
+        s = JsonStorage.create_storage(json_tmp_uri)
         assert(isinstance(s, PlainStorageProto))
 
         assert(isinstance(s._tasks(), JsonTaskStorage))
@@ -249,3 +249,18 @@ class TestJsonStorage:
         s.append_task(task)
         assert(s.set_task_status(task.id, TaskStatus.cancelled))
         assert(s.task_status(str(task.id)[:8]) == TaskStatus.cancelled)
+
+    def test_exception(self, json_tmp_uri: URI) -> None:
+        assert(json_tmp_uri.path)
+
+        pytest.raises(ValueError, JsonStorage.create_storage, URI(scheme='invalid-scheme', path=json_tmp_uri.path))
+        pytest.raises(ValueError, JsonStorage.create_storage, URI(scheme=__json_storage_scheme__))  # path is not set
+
+        data_path = pathlib.Path('/') / json_tmp_uri.path
+        data_path.rmdir()
+        data_path.touch()
+        pytest.raises(ValueError, JsonStorage.create_storage, json_tmp_uri)  # data directory is a file
+
+        data_path.unlink()
+        data_path.mkdir()
+        _ = JsonStorage.create_storage(json_tmp_uri)  # this is ok

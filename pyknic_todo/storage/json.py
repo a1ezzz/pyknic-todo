@@ -74,9 +74,8 @@ class StorageLock:
         self.__lock_file = lock_file.resolve()
         self.__thread_lock = threading.Lock()
 
-    # TODO: contextmanager is marked as deprecated
     @contextlib.contextmanager
-    def lock(self, blocking: bool = True) -> typing.Iterator[None]:
+    def lock(self, blocking: bool = True) -> typing.Generator[None, None, None]:
         """Try to lock a file
 
         :param blocking: wheter to wait for a lock indefinitely long or try once and raise exception if a lock wasn't
@@ -118,12 +117,11 @@ class _BaseJsonEntityStorage:
     """Base storage handling JSON file persistence and synchronization for an entity."""
 
     def __init__(self, data_dir: pathlib.Path, file_type: JsonFile, lock: StorageLock) -> None:
-        # TODO: docs + tests
         """Create a new basic storage and initialize an empty file if there wasn't before
 
+        :param data_dir: absolute path to a directory where a storage file should be created
         :param file_type: a type of a file this storage is used for
         :param lock: exclusive I/O lock
-        :param settings: storage settings
         """
 
         self.__file_type = file_type
@@ -155,8 +153,6 @@ class _BaseJsonEntityStorage:
 
         :param obj: object to serialize
         """
-        # TODO: test multiline comment!
-        #  there are comments in tasks and states (elsewhere?)
 
         model_dump = obj.model_dump_json()
         if '\n' in model_dump:
@@ -239,11 +235,10 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         data_dir: pathlib.Path,
         lock: StorageLock,
     ) -> None:
-        # TODO: docs + tests
         """ Create a new task storage
 
+        :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
-        :param settings: storage settings
         """
 
         PlainTaskStorageProto.__init__(self)
@@ -287,11 +282,10 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
         data_dir: pathlib.Path,
         lock: StorageLock,
     ) -> None:
-        # TODO: docs + tests
         """ Create a new rule storage
 
+        :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
-        :param settings: storage settings
         """
 
         PlainRecurrenceRuleStorageProto.__init__(self)
@@ -326,11 +320,10 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
         data_dir: pathlib.Path,
         lock: StorageLock,
     ) -> None:
-        # TODO: docs + tests
         """ Create a new state-history storage
 
+        :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
-        :param settings: storage settings
         """
 
         PlainStateHistoryStorageProto.__init__(self)
@@ -374,10 +367,9 @@ class JsonStorage(PlainStorageProto):
     """JSON facade storage coordinating JsonTaskStorage, JsonRecurrenceRuleStorage, and JsonHistoryStorage."""
 
     def __init__(self, storage_uri: URI) -> None:
-        # TODO: docs + tests
         """ Create a new storage
 
-        :param settings: storage settings
+        :param storage_uri: storage settings
         """
         PlainStorageProto.__init__(self)
 
@@ -416,5 +408,6 @@ class JsonStorage(PlainStorageProto):
 
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'JsonStorage':
-        # TODO: docs + tests
+        """ :meth:`.ToDoStorageProto.create_storage` method implementation
+        """
         return cls(storage_uri)
