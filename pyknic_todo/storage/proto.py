@@ -24,6 +24,7 @@ import typing
 import uuid
 
 from pyknic.lib.uri import URI
+from pyknic.lib.verify import verify_value
 
 from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus
 
@@ -57,6 +58,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """Load all tasks."""
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def save_tasks(self, tasks: list[Task]) -> None:
         """Replace tasks and save them.
 
@@ -65,10 +67,12 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         # TODO: pretty rough method. Should be replaced in a future with more specific functions
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
         """Load all recurrence rules."""
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
         """Replace recurrence rules and save them.
 
@@ -77,10 +81,12 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         # TODO: pretty rough method. Should be replaced in a future with more specific functions
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def load_history(self) -> list[StateUpdatedEvent]:
         """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def record_history_event(self, event: StateUpdatedEvent) -> None:
         """Record a state change event.
 
@@ -88,6 +94,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def append_task(self, task: Task) -> None:
         """Append a new task. A new state ('new') for this task will be kept in a history automatically.
 
@@ -95,6 +102,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
         """Return latest task status
 
@@ -102,6 +110,8 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
+    @verify_value(new_status=lambda x: x != TaskStatus.skipped)
     def set_task_status(
         self,
         task_id_query: typing.Union[uuid.UUID, str],
@@ -117,6 +127,7 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
     def set_task_recurrence(
         self,
         task_id_query: typing.Union[uuid.UUID, str],

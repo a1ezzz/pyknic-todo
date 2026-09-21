@@ -22,11 +22,18 @@
 """Basic sorage layer and abstractions for pyknic-todo conforming to STORAGE.md."""
 
 import abc
+import datetime
 import types
 import typing
 import uuid
 
+import dateutil.rrule
+
+from pyknic.lib.tasks.scheduler.cron_source import CronSchedule
+from pyknic.lib.verify import verify_value
+
 from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateUpdatedEvent, todo_models_now
+from pyknic_todo.models import RecurrenceScheduleType
 
 from .proto import ToDoStorageProto
 from .helpers import partial_uuid_select
@@ -227,7 +234,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         self._history().record_history_event(
             StateUpdatedEvent(
                 task_id=task.id,
-                next_state=TaskStatus.new,
+                next_state=TaskStatus.pending,
             )
         )
 
@@ -238,6 +245,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
             return self._history().task_latest_status(tc().id)
 
+    @verify_value(new_status=lambda x: x != TaskStatus.skipped)
     def set_task_status(
         self,
         task_id_query: typing.Union[uuid.UUID, str],
@@ -246,26 +254,28 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     ) -> Task:
         """:meth:`.ToDoStorageProto.set_task_status` implementation."""
 
+        if new_status == TaskStatus.skipped:
+            raise ValueError(f'Invalid state to set -- {TaskStatus.skipped}')
+
         with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
             task = tc()
+
+            if self.task_status(task.id) == TaskStatus.deleted:
+                raise ValueError('Unable to update status of the deleted task')
 
             now = todo_models_now()
 
             task_changed = False
 
-            if new_status == TaskStatus.done:
-                task_changed = True
-                task.completed_at = now
-            elif task.completed_at and new_status != TaskStatus.deleted:
-                task_changed = True
-                task.completed_at = None
-
             if new_status == TaskStatus.deleted:
                 task_changed = True
                 task.deleted_at = now
-            elif task.deleted_at:
+            elif new_status == TaskStatus.done:
                 task_changed = True
-                task.deleted_at = None
+                task.completed_at = now
+            elif task.completed_at:
+                task_changed = True
+                task.completed_at = None
 
             if task_changed:
                 task.version += 1
@@ -302,3 +312,85 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
 
             tc.commit()
             return task
+
+    def reinitialize_recurrency_states(self) -> None:
+        # TODO: mostly for recurrences
+
+        current_recurrences_task = [
+            x for x in self.load_tasks() if x.deleted_at is None and x.recurrence_rule_id is not None
+        ]
+        current_task_ids = [x.id for x in current_recurrences_task]
+
+        rules = {x.id: x for x in self.load_recurrence_rules()}
+        orphaned_rules = set(rules.keys())
+
+        now_dt = todo_models_now()
+
+        latest_states: typing.Dict[uuid.UUID, StateUpdatedEvent] = dict()
+        for h in self.load_history():
+            if h.task_id in current_task_ids:
+                latest_states[h.task_id] = h
+
+        for task in (x for x in self.load_tasks() if x.recurrence_rule_id):
+            assert(task.recurrence_rule_id)
+
+            orphaned_rules.remove(task.recurrence_rule_id)
+            rule = rules[task.recurrence_rule_id]
+
+            if rule.until_date and rule.until_date < now_dt:
+                continue
+
+            prev_state = latest_states[task.id]
+
+            next_dt = None
+            if rule.schedule_type == RecurrenceScheduleType.cron:
+                next_dt = self._next_cron_statest(task, rule, prev_state)
+            elif rule.schedule_type == RecurrenceScheduleType.rrule:
+                next_dt = self._next_rrules_statest(task, rule, prev_state)
+            else:
+                raise ValueError(f'Unknown recurrence type -- {rule.schedule_type}')
+
+            if next_dt is not None and next_dt < now_dt:
+                if prev_state.next_state in (TaskStatus.pending, TaskStatus.in_progress):
+                    skipped_event = StateUpdatedEvent(
+                        task_id=task.id,
+                        next_state=TaskStatus.skipped,
+                        comment='A task was not completted in time'
+                    )
+                    self.record_history_event(skipped_event)
+
+                self.record_history_event(StateUpdatedEvent(
+                    task_id=task.id,
+                    next_state=TaskStatus.pending,
+                    comment=f'The recurrence rule "{str(rule.id)[:8]}" triggered'
+                ))
+
+        self.save_recurrence_rules([x for x in rules.values() if x.id not in orphaned_rules])
+
+    def _next_cron_statest(
+            self, task: Task, rule: RecurrenceRule, previous_state: StateUpdatedEvent
+    ) -> datetime.datetime:
+        cron_schedule = CronSchedule.from_string(rule.schedule_expression)
+
+        start_dt = task.created_at
+        if previous_state:
+            start_dt = previous_state.created_at
+
+        cron_iter = cron_schedule.iterate(start_dt)
+        next_run_dt = next(cron_iter)
+        if next_run_dt == start_dt:
+            next_run_dt = next(cron_iter)
+        return next_run_dt
+
+    def _next_rrules_statest(
+        self, task: Task, rule: RecurrenceRule, previous_state: StateUpdatedEvent
+    ) -> datetime.datetime:
+        start_dt = task.created_at
+        if previous_state:
+            start_dt = previous_state.created_at
+
+        rrule = dateutil.rrule.rrulestr(rule.schedule_expression, dtstart=start_dt)
+        rrule_iter = rrule.xafter(start_dt)
+        result = next(rrule_iter)
+        assert(isinstance(result, datetime.datetime))
+        return result

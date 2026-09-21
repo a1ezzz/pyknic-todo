@@ -53,12 +53,10 @@ class TaskPriority(enum.Enum):
 class TaskStatus(enum.Enum):
     """Lifecycle status states for tasks."""
 
-    new = "new"                  # Newly scheduled task for future execution
     pending = "pending"          # Task is ready for execution
     in_progress = "in_progress"  # Task is actively being worked on
     done = "done"                # Task has been completed
     cancelled = "cancelled"      # Task was cancelled and will not be executed
-    expired = "expired"          # Task passed its deadline without being completed
     skipped = "skipped"          # Recurring task occurrence was skipped
     deleted = "deleted"          # Task was marked as deleted (soft delete)
 
@@ -71,15 +69,6 @@ class RecurrenceScheduleType(enum.Enum):
     cron = "cron"  # Standard cron format schedule expression (e.g., '0 10 * * 1-5')
 
 
-@enum.unique
-class EndCondtionType(enum.Enum):
-    """Types of termination conditions for recurring task schedules."""
-
-    never = "never"            # Task repeats indefinitely
-    until_date = "until_date"  # Task repetition stops after a specified date and time
-    count = "count"            # Task repetition stops after reaching a maximum number of occurrences
-
-
 class ToDoStorageSettings(pydantic.BaseModel):
     """Storage-level configuration and metadata.
 
@@ -90,22 +79,6 @@ class ToDoStorageSettings(pydantic.BaseModel):
 
     id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     comment: str = pydantic.Field(default="")
-
-
-class EndCondition(pydantic.BaseModel):
-    """Condition determining when a recurrence rule terminates.
-
-    Attributes:
-        condition_type: Type of termination condition (never, until_date, or count).
-        until_date: Optional cutoff datetime after which no more tasks are scheduled.
-        max_occurrences: Optional upper bound on the number of task occurrences.
-    """
-
-    model_config = pydantic.ConfigDict(validate_assignment=True, extra='forbid', val_temporal_unit='seconds')
-
-    condition_type: EndCondtionType = pydantic.Field(default=EndCondtionType.never)
-    until_date: typing.Optional[datetime.datetime] = None
-    max_occurrences: typing.Optional[int] = None
 
 
 class RecurrenceRule(pydantic.BaseModel):
@@ -126,7 +99,7 @@ class RecurrenceRule(pydantic.BaseModel):
     id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     schedule_type: RecurrenceScheduleType
     schedule_expression: str
-    end_condition: EndCondition = pydantic.Field(default_factory=lambda: EndCondition())
+    until_date: typing.Optional[datetime.datetime] = None
     created_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)
 
 
@@ -157,7 +130,7 @@ class Task(pydantic.BaseModel):
     project: typing.Optional[str] = None
     description: typing.Annotated[str, pydantic.StringConstraints(strip_whitespace=True)] = ""
     priority: TaskPriority = pydantic.Field(default=TaskPriority.medium)
-    due_date: typing.Optional[str] = None
+    due_date: typing.Optional[datetime.datetime] = None
     tags: list[str] = pydantic.Field(default_factory=list)
     recurrence_rule_id: typing.Optional[uuid.UUID] = None
     version: int = pydantic.Field(default=1)

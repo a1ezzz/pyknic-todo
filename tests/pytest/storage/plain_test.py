@@ -141,9 +141,9 @@ class TestPlainStorageProto:
         history = storage.load_history()
         assert(len(history) == 1)
         assert(history[0].task_id == task1.id)
-        assert(history[0].next_state == TaskStatus.new)
+        assert(history[0].next_state == TaskStatus.pending)
 
-        assert(storage.task_status(task1.id) == TaskStatus.new)
+        assert(storage.task_status(task1.id) == TaskStatus.pending)
 
     def test_task_status(self) -> None:
         storage = InMemoryStorage()
@@ -155,7 +155,7 @@ class TestPlainStorageProto:
         storage.append_task(task1)
         assert(len(storage.load_history()) == 1)
         assert(task1.version == 1)
-        assert(storage.task_status(task1.id) == TaskStatus.new)
+        assert(storage.task_status(task1.id) == TaskStatus.pending)
 
         storage.set_task_status(task1.id, TaskStatus.in_progress)
         assert(len(storage.load_history()) == 2)
@@ -169,11 +169,11 @@ class TestPlainStorageProto:
         assert(task1.deleted_at is None)
         assert(task1.version == 2)
 
-        storage.set_task_status(task1.id, TaskStatus.deleted)
+        storage.set_task_status(task1.id, TaskStatus.cancelled)
         assert(len(storage.load_history()) == 4)
-        assert(storage.task_status(task1.id) == TaskStatus.deleted)
-        assert(task1.completed_at is not None)
-        assert(task1.deleted_at is not None)
+        assert(storage.task_status(task1.id) == TaskStatus.cancelled)
+        assert(task1.completed_at is None)
+        assert(task1.deleted_at is None)
         assert(task1.version == 3)
 
         storage.set_task_status(task1.id, TaskStatus.pending)
@@ -181,21 +181,23 @@ class TestPlainStorageProto:
         assert(storage.task_status(task1.id) == TaskStatus.pending)
         assert(task1.completed_at is None)
         assert(task1.deleted_at is None)
-        assert(task1.version == 4)
+        assert(task1.version == 3)
 
         storage.set_task_status(task1.id, TaskStatus.done)
         assert(len(storage.load_history()) == 6)
         assert(storage.task_status(task1.id) == TaskStatus.done)
         assert(task1.completed_at is not None)
         assert(task1.deleted_at is None)
+        assert(task1.version == 4)
+
+        storage.set_task_status(task1.id, TaskStatus.deleted)
+        assert(len(storage.load_history()) == 7)
+        assert(storage.task_status(task1.id) == TaskStatus.deleted)
+        assert(task1.completed_at is not None)
+        assert(task1.deleted_at is not None)
         assert(task1.version == 5)
 
-        storage.set_task_status(task1.id, TaskStatus.cancelled)
-        assert(len(storage.load_history()) == 7)
-        assert(storage.task_status(task1.id) == TaskStatus.cancelled)
-        assert(task1.completed_at is None)
-        assert(task1.deleted_at is None)
-        assert(task1.version == 6)
+        pytest.raises(ValueError, storage.set_task_status, task1.id, TaskStatus.pending)
 
     def test_task_recurrence(self) -> None:
         storage = InMemoryStorage()

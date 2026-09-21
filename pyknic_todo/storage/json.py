@@ -463,6 +463,8 @@ class JsonStorage(PlainStorageProto):
         self.__rs = JsonRecurrenceRuleStorage(self.__data_dir, lock=self.__lock)
         self.__hs = JsonHistoryStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
 
+        self.reinitialize_recurrency_states()
+
     def _tasks(self) -> JsonTaskStorage:
         """ :meth:`.PlainStorageProto._tasks` method implementation
         """

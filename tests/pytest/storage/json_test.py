@@ -1,15 +1,15 @@
 
+import datetime
 import pathlib
-import tempfile
-import typing
+import multiprocessing
 import uuid
 
 import pytest
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, TaskPriority, RecurrenceRule, RecurrenceScheduleType, EndCondtionType
-from pyknic_todo.models import EndCondition, TaskStatus, StateUpdatedEvent
+from pyknic_todo.models import Task, TaskPriority, RecurrenceRule, RecurrenceScheduleType, TaskStatus
+from pyknic_todo.models import StateUpdatedEvent
 
 from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainRecurrenceRuleStorageProto
 from pyknic_todo.storage.plain import PlainStateHistoryStorageProto, PlainStorageProto
@@ -18,11 +18,9 @@ from pyknic_todo.storage.json import StorageLock, JsonTaskStorage, JsonRecurrenc
 from pyknic_todo.storage.json import JsonStorage, JsonFile, __json_storage_scheme__
 
 
-@pytest.fixture
-def json_tmp_uri() -> typing.Generator[URI, None, None]:
-
-    with tempfile.TemporaryDirectory(prefix='pytest-pyknic_todo', suffix='json_tmp_uri_fixture') as tmp_dir:
-        yield URI.parse(f'{__json_storage_scheme__}:///{tmp_dir}')
+def _concurrent_create_worker(storage_uri: URI, index: int) -> None:
+    storage = JsonStorage(storage_uri)
+    storage.append_task(Task(title=f"Concurrent task {index}"))
 
 
 class TestStorageLock:
@@ -157,10 +155,7 @@ class TestJsonRecurrenceRuleStorage:
         rule2 = RecurrenceRule(
             schedule_type=RecurrenceScheduleType.rrule,
             schedule_expression="FREQ=DAILY",
-            end_condition=EndCondition(
-                condition_type=EndCondtionType.count,
-                max_occurrences=5
-            )
+            until_date='2025-05-25T05:25:25Z'  # type: ignore[arg-type]  # this is ok, this is a test!
         )
 
         rs.append_recurrence_rule(rule1)
@@ -285,3 +280,69 @@ class TestJsonStorage:
         data_path.unlink()
         data_path.mkdir()
         _ = JsonStorage.create_storage(json_tmp_uri)  # this is ok
+
+    def test_concurrency(self, json_tmp_uri: URI) -> None:
+
+        procs = [
+            multiprocessing.Process(
+                target=_concurrent_create_worker,
+                args=(json_tmp_uri, i),
+            )
+            for i in range(10)
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join()
+
+        storage = JsonStorage(json_tmp_uri)
+        tasks = storage.load_tasks()
+        assert(len(tasks) == 10)
+        history = storage.load_history()
+        assert(len(history) == 10)
+
+    @pytest.mark.parametrize(
+        "schedule_type, schedule_expr", [
+            (RecurrenceScheduleType.cron, '0 12 * * *'),
+            (RecurrenceScheduleType.rrule, 'FREQ=DAILY')
+        ]
+    )
+    def test_cron_recurrency(
+        self, json_tmp_uri: URI, schedule_type: RecurrenceScheduleType, schedule_expr: str
+    ) -> None:
+        storage = JsonStorage(json_tmp_uri)
+
+        task = Task(title="Sample task")
+        storage.append_task(task)  # this populates some fields like storage_origin
+        assert(storage.task_status(task.id) == TaskStatus.pending)
+        events = storage.load_history()
+        assert(len(events) == 1)
+
+        cron_rrule = RecurrenceRule(
+            schedule_type=schedule_type,
+            schedule_expression=schedule_expr
+        )
+        storage.set_task_recurrence(task.id, cron_rrule)
+
+        task = storage.load_tasks()[0]  # set_task_recurrence replaces inner object
+        assert(task.recurrence_rule_id is not None)
+        assert(storage.task_status(task.id) == TaskStatus.pending)  # recurrence rule does not affect state
+
+        faked_creation_time = datetime.datetime.fromtimestamp(  # 14th of Novermber 2023
+            1700000000, tz=datetime.timezone.utc
+        )
+        task.created_at = faked_creation_time
+        task.updated_at = faked_creation_time
+        event = events[0]
+        event.created_at = faked_creation_time
+        assert(storage.task_status(task.id) == TaskStatus.pending)  # no affect still
+
+        storage.save_tasks([task])
+        storage._history()._write_json([event])
+
+        storage = JsonStorage(json_tmp_uri)  # forces reinitialization
+        events = storage.load_history()
+
+        assert(len(events) == 3)
+        assert(events[1].next_state == TaskStatus.skipped)
+        assert(events[2].next_state == TaskStatus.pending)
