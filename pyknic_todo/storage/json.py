@@ -114,6 +114,9 @@ class StorageLock:
                     os.close(fd)
 
 
+_BaseJsonGenVar = typing.TypeVar('_BaseJsonGenVar')
+
+
 class _BaseJsonEntityStorage:
     """Base storage handling JSON file persistence and synchronization for an entity."""
 
@@ -132,7 +135,7 @@ class _BaseJsonEntityStorage:
         self.__lock_manager = lock
         self._ensure_file()
 
-    def _read_json[T](self) -> typing.List[T]:
+    def _read_json(self) -> typing.List[_BaseJsonGenVar]:
         """ Read, parse and return list of inner objects"""
 
         with self.__lock_manager.lock():
