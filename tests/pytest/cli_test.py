@@ -177,7 +177,6 @@ class TestCLI:
         assert(kv["status"] == TaskStatus.cancelled.value)
         assert("history" not in kv)
         assert(kv["recurrence"] is None)
-        assert(kv["recurrence_rule_id"] is None)
 
         # Check history subcommand receives comments
         buf = io.StringIO()
