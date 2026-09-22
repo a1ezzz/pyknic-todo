@@ -64,3 +64,14 @@ class TestCLI:
         # 5. List tasks
         code = main([storage_arg, "list"])
         assert(code == 0)
+
+        # 6. List unknown project task
+        code = main([storage_arg, "list", "--project", "unknown-project"])
+        assert(code == 0)
+
+        # 7. Delete a task
+        code = main([storage_arg, "delete", '--task.id', str(task_id)[:8]])
+        assert(code == 0)
+        storage = JsonStorage(json_tmp_uri)
+        tasks = storage.load_tasks()
+        assert(storage.task_status(tasks[0].id) == TaskStatus.deleted)
