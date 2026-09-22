@@ -1,9 +1,6 @@
 """CLI interface for pyknic-todo."""
 
-# TODO: refactor this
 # TODO: docs!
-# TODO: tests!
-# TODO: fields description
 
 import asyncio
 import sys
@@ -25,7 +22,9 @@ class _ToDoCLISettings(
     cli_exit_on_error=True
 ):
     json_mode: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
-        default=False, description='!!!', validation_alias=pydantic.AliasChoices('json-mode')
+        default=False,
+        description='Print the JSON result instead of formatting the output',
+        validation_alias=pydantic.AliasChoices('json-mode')
     )
 
 
