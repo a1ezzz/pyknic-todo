@@ -1,9 +1,6 @@
 """CLI interface for pyknic-todo."""
 
-# TODO: refactor this
 # TODO: docs!
-# TODO: tests!
-# TODO: fields description
 
 import asyncio
 import sys
