@@ -31,7 +31,8 @@ import pydantic_settings
 
 from pyknic.lib.uri import URI
 from pyknic.lib.bellboy.app import register_bellboy_command, BellBoyCommandHandler
-from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedbackResult, LobbyTableFeedbackResult
+from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyKeyValueFeedbackResult, LobbyStrFeedbackResult
+from pyknic.lib.fastapi.models.lobby import LobbyTableFeedbackResult
 from pyknic.lib.io.aio_wrapper import AsyncWrapper
 
 from pyknic_todo.models import TaskPriority, TaskStatus, Task, RecurrenceScheduleType, RecurrenceRule
@@ -174,6 +175,28 @@ class ToDoRepeatCommandModel(pydantic.BaseModel):
     )
 
 
+class ToDoShowCommandModel(pydantic.BaseModel):
+    """Show detailed information about a single task."""
+
+    task: ToDoTaskSelectModel = pydantic.Field(
+        description='Target task selector by ID prefix or title.',
+    )
+
+
+class ToDoHistoryCommandModel(pydantic.BaseModel):
+    """Show status history of a single task."""
+
+    task: ToDoTaskSelectModel = pydantic.Field(
+        description='Target task selector by ID prefix or title.',
+    )
+    depth: int = pydantic.Field(
+        default=10,
+        ge=0,
+        description='Depth of task status history to display.',
+        validation_alias=pydantic.AliasChoices('depth', 'history-depth', 'd'),
+    )
+
+
 class ToDoCommandModel(pydantic.BaseModel):
     """Root command model for pyknic-todo BellBoy operations."""
 
@@ -187,7 +210,8 @@ class ToDoCommandModel(pydantic.BaseModel):
     done: pydantic_settings.CliSubCommand[ToDoDoneCommandModel]
     list: pydantic_settings.CliSubCommand[ToDoListCommandModel]
     repeat: pydantic_settings.CliSubCommand[ToDoRepeatCommandModel]
-    # TODO: add command for detailed view of a single task
+    show: pydantic_settings.CliSubCommand[ToDoShowCommandModel]
+    history: pydantic_settings.CliSubCommand[ToDoHistoryCommandModel]
 
 
 class BellBoyToDoCommand(BellBoyCommandHandler):
@@ -232,6 +256,10 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             caller = await AsyncWrapper.create(self.__list)
         elif self._args.repeat:
             caller = await AsyncWrapper.create(self.__repeat)
+        elif self._args.show:
+            caller = await AsyncWrapper.create(self.__show)
+        elif self._args.history:
+            caller = await AsyncWrapper.create(self.__history)
 
         if caller is None:
             raise ValueError('Unknown subcommand spotted!')
@@ -429,4 +457,81 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
         return LobbyStrFeedbackResult(
             str_result=f'A repeat rule was set for a task "{task.title}" (id: {task.id})',
             plugin_version=__plugin_version__
+        )
+
+    def __show(self) -> LobbyCommandResult:
+        """Execute the 'show' subcommand to display detailed information about a single task.
+
+        :return: Key-value feedback result containing task details.
+        """
+        assert(isinstance(self._args, ToDoCommandModel))
+        assert(self._args.show)
+
+        task = self.__select_single_task(self._args.show.task)
+        storage = self.__storage()
+
+        recurrence_info = None
+        if task.recurrence_rule_id:
+            for rule in storage.load_recurrence_rules():
+                if rule.id == task.recurrence_rule_id:
+                    recurrence_info = f'{rule.schedule_type.value}: {rule.schedule_expression}'
+                    if rule.until_date:
+                        recurrence_info += f' (until {rule.until_date.isoformat()})'
+                    break
+
+        kv_result: typing.Dict[str, typing.Any] = {
+            'id': str(task.id),
+            'title': task.title,
+            'status': storage.task_status(task.id).value,
+            'priority': task.priority.value,
+            'project': task.project,
+            'description': task.description,
+            'tags': task.tags,
+            'due_date': task.due_date.isoformat() if task.due_date else None,
+            'recurrence': recurrence_info,
+            'version': task.version,
+            'created_at': (
+                task.created_at.isoformat() if isinstance(task.created_at, datetime.datetime) else str(task.created_at)
+            ),
+            'updated_at': (
+                task.updated_at.isoformat() if isinstance(task.updated_at, datetime.datetime) else str(task.updated_at)
+            ),
+            'completed_at': task.completed_at.isoformat() if task.completed_at else None,
+            'deleted_at': task.deleted_at.isoformat() if task.deleted_at else None,
+            'storage_origin': str(task.storage_origin) if task.storage_origin else None,
+        }
+
+        return LobbyKeyValueFeedbackResult(
+            plugin_version=__plugin_version__,
+            kv_result=kv_result,
+        )
+
+    def __history(self) -> LobbyCommandResult:
+        """Execute the 'history' subcommand to display status history for a single task.
+
+        :return: Table feedback result containing status history events.
+        """
+        assert(isinstance(self._args, ToDoCommandModel))
+        assert(self._args.history)
+
+        task = self.__select_single_task(self._args.history.task)
+        storage = self.__storage()
+
+        all_history = storage.load_history()
+        task_events = [e for e in all_history if e.task_id == task.id]
+        task_events.sort(key=lambda e: e.created_at)
+
+        depth = self._args.history.depth
+        if depth > 0:
+            selected_events = task_events[-depth:]
+        else:
+            selected_events = []
+
+        return LobbyTableFeedbackResult(
+            plugin_version=__plugin_version__,
+            table_result={
+                'status': [e.next_state.value for e in selected_events],
+                'created_at': [e.created_at.isoformat() for e in selected_events],
+                'comment': [e.comment for e in selected_events],
+            }
         )
