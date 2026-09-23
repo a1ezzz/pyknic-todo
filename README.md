@@ -1,51 +1,54 @@
 # pyknic-todo
 
-**pyknic-todo** is a reliable command-line task manager written in Python. It provides structured task management with local JSON storage, recurrence rule specifications (RRULE and Cron), and safe concurrent file access using file locks.
+**pyknic-todo** is a command-line task manager and BellBoy plugin written in Python. It provides structured task management with local JSON file storage (`json+file`), recurrence rule specifications (RRULE and Cron), and safe concurrent process access via file locking.
 
 ---
 
 ## Features
 
-- **Core Task Management**: Create, list and update tasks with title, description (Markdown-ready), priority, status, due date, tags, and project associations.
-- **Rich Status Lifecycle**: Support for full lifecycle statuses:
-  - `new`: Scheduled for the future.
-  - `pending`: Ready to be worked on (default).
+- **Core Task Management**: Create, list, inspect, update status, track history, and soft-delete tasks with title, description (Markdown-ready), priority, status, tags, and project associations.
+- **Task Lifecycle**: Full lifecycle statuses:
+  - `pending`: Ready to be worked on (default on creation).
   - `in_progress`: Currently being executed.
   - `done`: Completed.
   - `cancelled`: Cancelled.
-  - `skipped`: Skipped (for recurring tasks).
+  - `skipped`: Skipped (applicable to recurring tasks).
   - `deleted`: Soft-deleted.
-- **Recurrence Support**: Define recurring schedules using RRULE (RFC 5545) or Cron expressions, with configurable end conditions (`never`, `until_date`, or `count`).
-- **Concurrent & Process-Safe**: Built-in file locking (`fcntl.flock`) and atomic write mechanisms to prevent race conditions or corrupted updates across concurrent CLI executions.
-- **ID Prefix Resolution**: Reference tasks by short UUID prefixes (e.g. `c3b9e4a8` instead of the full UUID).
-- **Flexible List Filtering**: Default view displays active tasks (hiding completed and deleted), with flags for `--all`, `--completed`, `--include-completed`, `--status`, and raw `--json` output for scripting.
-- **Extensible Configuration**: Configurable via CLI arguments, environment variables (`PYKNIC_TODO_*` / `TODO_DATA_DIR`), or `.env` files via Pydantic Settings.
+- **Recurrence Support**: Define recurring schedules using RRULE (RFC 5545) or Cron expressions, with optional expiration date (`--until`).
+- **Concurrent & Process-Safe**: Built-in file locking (`fcntl.flock`) on `.lock` to prevent race conditions or corrupted updates across concurrent CLI executions.
+- **Task Selector**: Target tasks either by UUID / short UUID prefix (e.g. `c3b9e4a8`) using `--task.id`, or by exact title using `--task.title`.
+- **Flexible List Filtering**: Default view displays existing tasks, with flags for status groups (`--active-tasks`, `--completed-tasks`, `--deleted-tasks`), as well as filters by `--id`, `--title`, `--project`, `--priority`, `--tags`, and `--max-age`.
+- **Machine-Readable JSON Mode**: Global `--json-mode` flag for integrations, scripts, and CI/CD pipelines.
+- **BellBoy & Pyknic Integration**: Seamless integration as a `pyknic` plugin exposing the `todo` command handler.
 
 ---
 
 ## Project Structure & Data Storage
 
-By default, data is stored in the `./data/` directory (or custom directory specified via `--data-dir` or `PYKNIC_TODO_DATA_DIR`):
+Storage is specified via a storage URI with the `json+file` scheme (e.g. `json+file:///absolute/path/to/data`):
 
 ```
 data/
-├── tasks.json             # Current task items snapshot
-├── recurrence_rules.json  # Recurrence rule definitions
-├── states_history.json    # Append-only state transition audit log
+├── tasks.json             # Tasks snapshot (newline-delimited JSON)
+├── recurrence_rules.json  # Recurrence rule definitions (newline-delimited JSON)
+├── states_history.json    # Append-only state transition audit log (newline-delimited JSON)
+├── settings.json          # Storage metadata and client origin ID
 └── .lock                  # Process lockfile for safe concurrency
 ```
 
-### File Schema Overview
-- **`tasks.json`**: Tracks `$schema_version`, unique `client_id`, last modification timestamp `updated_at`, and task records.
-- **`recurrence_rules.json`**: Stores schedules (`rrule` or `cron`) and completion conditions (`never`, `until_date`, `count`).
-- **`states_history.json`**: Keeps an audit log of state changes (`new_state`, `timestamp`, `actor_client_id`, `comment`).
+### Storage Files Overview
+- **`tasks.json`**: Newline-delimited JSON storing `Task` records (title, description, priority, tags, project, timestamps, recurrence rule ID).
+- **`recurrence_rules.json`**: Newline-delimited JSON storing `RecurrenceRule` records (`schedule_type`, `schedule_expression`, optional `until_date`).
+- **`states_history.json`**: Newline-delimited JSON storing `StateUpdatedEvent` records (`task_id`, `created_at`, `next_state`, `comment`, `storage_origin`).
+- **`settings.json`**: Storage metadata storing `ToDoStorageSettings` (`id`, `comment`).
+- **`.lock`**: File lock used by `StorageLock` (`fcntl.flock`) for atomic, process-safe operations.
 
 ---
 
 ## Installation
 
 ### Requirements
-- Python 3.9+
+- Python 3.11+
 - Linux / macOS (for POSIX file locking support)
 
 ### Setup Virtual Environment
@@ -56,11 +59,14 @@ git clone <repo-url>
 cd pyknic-todo
 
 # Create and activate virtual environment
-virtualenv .venv
-source .venv/bin/activate
+virtualenv venv
+source venv/bin/activate
 
 # Install dependencies and editable package
 pip install -r requirements.txt
+
+# Or install with development & testing dependencies
+pip install -e ".[dev,test]"
 ```
 
 Once installed, the CLI command `pyknic-todo` will be available in your environment. You can also run the local launcher directly:
@@ -68,37 +74,31 @@ Once installed, the CLI command `pyknic-todo` will be available in your environm
 ```bash
 ./pyknic-todo --help
 # or
-python3 -m pyknic_todo --help
+python -m pyknic_todo --help
 ```
 
 ---
 
-## Configuration
+## Storage Configuration
 
-Configuration is managed via Pydantic Settings and can be supplied through environment variables or a `.env` file:
-
-| Setting | Environment Variable(s) | Default | Description |
-|---|---|---|---|
-| `data_dir` | `PYKNIC_TODO_DATA_DIR`, `TODO_DATA_DIR` | `./data` | Directory where JSON files are stored |
-| `default_priority` | `PYKNIC_TODO_DEFAULT_PRIORITY` | `medium` | Default priority for newly created tasks |
-| `default_status` | `PYKNIC_TODO_DEFAULT_STATUS` | `pending` | Default status for newly created tasks |
-
-### Inspect Configuration
-Display active configuration settings:
+Pyknic-todo requires specifying the backend storage URI via the `--storage-uri` argument or through the `STORAGE-URI` environment variable:
 
 ```bash
-pyknic-todo config
-```
+# Using the CLI flag
+pyknic-todo --storage-uri json+file:///absolute/path/to/data <command>
 
-Or in JSON format:
-
-```bash
-pyknic-todo config --json
+# Or export the environment variable
+export STORAGE-URI="json+file:///absolute/path/to/data"
+pyknic-todo <command>
 ```
 
 ---
 
 ## CLI Usage & Commands
+
+### Global Options
+- `--storage-uri <URI>`: Task storage backend URI (required, e.g. `json+file:///tmp/my-todos`).
+- `--json-mode`: Print machine-readable JSON result instead of formatting console tables and strings.
 
 ### 1. Adding Tasks (`add`)
 
@@ -106,112 +106,142 @@ Create a new task:
 
 ```bash
 # Basic task
-pyknic-todo add "Prepare release report"
+pyknic-todo --storage-uri json+file:///tmp/my-todos add -t "Prepare release report"
 
-# Task with description, priority, tags, project, and due date
-pyknic-todo add "Prepare release report" \
-  -d "Verify metrics and aggregate logs" \
+# Task with description, priority, tags, and project
+pyknic-todo --storage-uri json+file:///tmp/my-todos add \
+  -t "Prepare release report" \
+  --description "Verify metrics and aggregate logs" \
   -p high \
-  -t work,release,q3 \
-  --project p-work-001 \
-  --due "2026-09-15T18:00:00Z"
+  --tags work,release,q3 \
+  --project p-work-001
 ```
 
 Available options:
-- `-d, --description`: Extended description (supports Markdown).
-- `-p, --priority`: Priority (`low`, `medium`, `high`, `urgent`). Default: `medium`.
-- `-s, --status`: Initial status (`new`, `pending`, `in_progress`, etc.). Default: `pending`.
-- `-t, --tag`: Tag (can be repeated or comma-separated: `-t work -t dev` or `-t work,dev`).
-- `--project`: Project ID string.
-- `--due, --due-date`: Due date in ISO format.
+- `-t, --title`: Title or summary of the task (**required**).
+- `--description`: Detailed description (supports Markdown).
+- `-p, --priority`: Priority level (`low`, `medium`, `high`, `urgent`). Default: `medium`.
+- `--tags`: List of tags or labels (e.g. `--tags work,release`).
+- `--project`: Optional project name for grouping related tasks.
 
 ### 2. Listing Tasks (`list`)
 
-List tasks in a formatted table:
+List and filter tasks in a formatted table:
 
 ```bash
-# List active tasks (excludes completed and deleted)
-pyknic-todo list
+# List all tasks
+pyknic-todo --storage-uri json+file:///tmp/my-todos list
 
-# Show all tasks including completed and deleted
-pyknic-todo list --all
-# or shorthand
-pyknic-todo list -a
+# Filter active tasks (pending or in_progress)
+pyknic-todo --storage-uri json+file:///tmp/my-todos list --active-tasks
 
-# Show only completed tasks
-pyknic-todo list --completed
-# or shorthand
-pyknic-todo list -c
+# Filter completed tasks (done, cancelled, skipped)
+pyknic-todo --storage-uri json+file:///tmp/my-todos list --completed-tasks
 
-# Include completed tasks with active tasks
-pyknic-todo list --include-completed
+# Filter soft-deleted tasks
+pyknic-todo --storage-uri json+file:///tmp/my-todos list --deleted-tasks
 
-# Filter by a specific status
-pyknic-todo list -s in_progress
+# Filter by project, priority, or tags
+pyknic-todo --storage-uri json+file:///tmp/my-todos list --project p-work-001 --priority high
 
-# Output tasks as JSON (useful for integrations, jq, or scripts)
-pyknic-todo list --json
+# Filter tasks modified within the last N days
+pyknic-todo --storage-uri json+file:///tmp/my-todos list --max-age 7
+
+# Output tasks in JSON mode
+pyknic-todo --storage-uri json+file:///tmp/my-todos --json-mode list
 ```
 
-### 3. Updating Task Status (`status`)
+### 3. Showing Task Details (`show`)
 
-Change the status of a task using its ID or unique ID prefix:
+Display detailed key-value metadata for a single task:
 
 ```bash
-# Move task to in_progress with a comment
-pyknic-todo status c3b9e4a8 in_progress -m "Started preliminary audit"
+# Show by short UUID prefix
+pyknic-todo --storage-uri json+file:///tmp/my-todos show --task.id c3b9e4a8
+
+# Show by exact title
+pyknic-todo --storage-uri json+file:///tmp/my-todos show --task.title "Prepare release report"
+
+# Show details in JSON format
+pyknic-todo --storage-uri json+file:///tmp/my-todos --json-mode show --task.id c3b9e4a8
+```
+
+### 4. Updating Task Status (`status`)
+
+Change the status of an existing task using its ID prefix or title:
+
+```bash
+# Move task to in_progress with an explanatory comment
+pyknic-todo --storage-uri json+file:///tmp/my-todos status \
+  --task.id c3b9e4a8 \
+  -s in_progress \
+  --comment "Started preliminary audit"
 
 # Mark task as cancelled
-pyknic-todo status c3b9e4a8 cancelled -m "Postponed indefinitely"
+pyknic-todo --storage-uri json+file:///tmp/my-todos status \
+  --task.id c3b9e4a8 \
+  -s cancelled \
+  --comment "Postponed indefinitely"
 ```
 
-### 4. Completing a Task (`done`)
+Available options:
+- `--task.id`: Task identifier or UUID prefix.
+- `--task.title`: Exact task title.
+- `-s, --status`: New lifecycle status (`pending`, `in_progress`, `done`, `cancelled`, `skipped`, `deleted`) (**required**).
+- `--comment`: Optional comment explaining the status transition.
+
+### 5. Completing a Task (`done`)
 
 Shorthand command to mark a task as completed (`done`):
 
 ```bash
-pyknic-todo done c3b9e4a8
-pyknic-todo done c3b9e4a8 -m "Finished verification"
+pyknic-todo --storage-uri json+file:///tmp/my-todos done --task.id c3b9e4a8
+pyknic-todo --storage-uri json+file:///tmp/my-todos done --task.id c3b9e4a8 --comment "Finished verification"
 ```
 
-### 5. Configuring Recurrence (`repeat`)
+### 6. Configuring Recurrence (`repeat`)
 
 Attach a recurrence schedule to a task:
 
 ```bash
-# RRULE: Weekly recurrence on Monday, Wednesday, Friday until a specific date
-pyknic-todo repeat c3b9e4a8 \
-  --type rrule \
-  -e "FREQ=WEEKLY;BYDAY=MO,WE,FR" \
-  --end-type until_date \
+# RRULE: Daily recurrence until a specific date
+pyknic-todo --storage-uri json+file:///tmp/my-todos repeat \
+  --task.id c3b9e4a8 \
+  --schedule-type rrule \
+  --schedule "FREQ=DAILY" \
   --until "2026-12-31T23:59:59Z"
 
-# Cron: Run on weekdays at 10:00 AM, up to 10 occurrences
-pyknic-todo repeat c3b9e4a8 \
-  --type cron \
-  -e "0 10 * * 1-5" \
-  --end-type count \
-  --count 10
-
-# Indefinite recurrence
-pyknic-todo repeat c3b9e4a8 \
-  -e "FREQ=DAILY" \
-  --end-type never
+# Cron: Run on Mondays at 10:00 AM indefinitely
+pyknic-todo --storage-uri json+file:///tmp/my-todos repeat \
+  --task.id c3b9e4a8 \
+  --schedule-type cron \
+  --schedule "0 10 * * 1"
 ```
 
-Options:
-- `-e, --expression`: RRULE expression string or Cron expression (**required**).
-- `-t, --type`: Schedule format (`rrule` or `cron`). Default: `rrule`.
-- `--end-type`: End condition (`never`, `until_date`, `count`). Default: `never`.
-- `--until`: ISO formatted end date for `until_date`.
-- `--count`: Maximum occurrences for `count`.
+Available options:
+- `--task.id` or `--task.title`: Target task selector (**required**).
+- `--schedule-type`: Schedule format (`rrule` or `cron`) (**required**).
+- `--schedule`: RRULE expression string or Cron expression (**required**).
+- `--until`: Optional ISO-formatted datetime expiration for the schedule.
 
-### Custom Data Directory
+### 7. Task Status History (`history`)
 
-Specify a custom data directory for any command using `--data-dir`:
+Display the audit log of status transitions for a task:
 
 ```bash
-pyknic-todo --data-dir /tmp/my-todo list
+# Show recent status history (default depth: 10)
+pyknic-todo --storage-uri json+file:///tmp/my-todos history --task.id c3b9e4a8
+
+# Show history with custom depth
+pyknic-todo --storage-uri json+file:///tmp/my-todos history --task.id c3b9e4a8 -d 5
+```
+
+### 8. Deleting a Task (`delete`)
+
+Soft-delete an existing task:
+
+```bash
+pyknic-todo --storage-uri json+file:///tmp/my-todos delete --task.id c3b9e4a8
 ```
 
 ---
@@ -219,43 +249,43 @@ pyknic-todo --data-dir /tmp/my-todo list
 ## Allowed Values & Schemas
 
 ### Statuses
-- `new`
-- `pending`
-- `in_progress`
-- `done`
-- `cancelled`
-- `skipped`
-- `deleted`
+- `pending`: Task is ready for execution (initial status).
+- `in_progress`: Task is actively being worked on.
+- `done`: Task has been completed.
+- `cancelled`: Task was cancelled.
+- `skipped`: Occurrence was skipped (for recurring tasks).
+- `deleted`: Task was soft-deleted.
 
 ### Priorities
 - `low`
-- `medium`
+- `medium` (default)
 - `high`
 - `urgent`
 
 ### Recurrence Schedule Types
-- `rrule` (RFC 5545 RRULE format)
-- `cron` (standard 5-part cron syntax)
-
-### Recurrence End Condition Types
-- `never`
-- `until_date`
-- `count`
+- `rrule`: RFC 5545 iCalendar recurrence rule (e.g. `FREQ=DAILY`, `FREQ=WEEKLY;BYDAY=MO,WE,FR`).
+- `cron`: Standard cron schedule format (e.g. `0 10 * * 1`, `0 12 * * *`).
 
 ---
 
 ## Development & Testing
 
-Run unit tests using `pytest` within the project virtual environment:
+Run unit tests and generate test coverage reports:
 
 ```bash
-.venv/bin/pytest
+venv/bin/pytest
 ```
 
-Run test suite with verbose output:
+Run code style and lint checks:
 
 ```bash
-.venv/bin/pytest -v
+venv/bin/flake8
+```
+
+Run static type checking:
+
+```bash
+venv/bin/mypy pyknic_todo
 ```
 
 ---
