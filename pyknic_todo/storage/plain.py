@@ -265,21 +265,16 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
 
             now = todo_models_now()
 
-            task_changed = False
-
             if new_status == TaskStatus.deleted:
-                task_changed = True
                 task.deleted_at = now
             elif new_status == TaskStatus.done:
-                task_changed = True
                 task.completed_at = now
             elif task.completed_at:
-                task_changed = True
                 task.completed_at = None
 
-            if task_changed:
-                task.version += 1
-                tc.commit()
+            task.updated_at = now
+            task.version += 1
+            tc.commit()
 
             self._history().record_history_event(
                 StateUpdatedEvent(
@@ -372,9 +367,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     ) -> datetime.datetime:
         cron_schedule = CronSchedule.from_string(rule.schedule_expression)
 
-        start_dt = task.created_at
-        if previous_state:
-            start_dt = previous_state.created_at
+        start_dt = previous_state.created_at
 
         cron_iter = cron_schedule.iterate(start_dt)
         next_run_dt = next(cron_iter)
@@ -385,12 +378,13 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     def _next_rrules_statest(
         self, task: Task, rule: RecurrenceRule, previous_state: StateUpdatedEvent
     ) -> datetime.datetime:
-        start_dt = task.created_at
-        if previous_state:
-            start_dt = previous_state.created_at
 
-        rrule = dateutil.rrule.rrulestr(rule.schedule_expression, dtstart=start_dt)
-        rrule_iter = rrule.xafter(start_dt)
+        rrule = dateutil.rrule.rrulestr(rule.schedule_expression, dtstart=task.created_at)
+        rrule_iter = rrule.xafter(task.created_at)
         result = next(rrule_iter)
+
+        while result < previous_state.created_at:
+            result = next(rrule_iter)
+
         assert(isinstance(result, datetime.datetime))
         return result

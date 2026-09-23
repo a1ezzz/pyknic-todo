@@ -25,6 +25,7 @@
 
 import datetime
 import typing
+import uuid
 
 import pydantic
 import pydantic_settings
@@ -35,7 +36,7 @@ from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyKeyValueFee
 from pyknic.lib.fastapi.models.lobby import LobbyTableFeedbackResult
 from pyknic.lib.io.aio_wrapper import AsyncWrapper
 
-from pyknic_todo.models import TaskPriority, TaskStatus, Task, RecurrenceScheduleType, RecurrenceRule
+from pyknic_todo.models import TaskPriority, TaskStatus, Task, RecurrenceScheduleType, RecurrenceRule, todo_models_now
 from pyknic_todo.storage.storage import storage_factory
 from pyknic_todo.storage.proto import ToDoStorageProto
 
@@ -152,8 +153,26 @@ class ToDoListCommandModel(pydantic.BaseModel):
         default=None,
         description='Filter tasks that share at least one of the specified tags.',
     )
-
-    # TODO: add custom meta-modes like: 'active' (default), 'all', or 'completed' or 'new'/in_progress
+    active_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include only those that are in progress or are pending',
+        validation_alias=pydantic.AliasChoices('active-tasks')
+    )
+    completed_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include only those that are cancelled, skipped or are done',
+        validation_alias=pydantic.AliasChoices('completed-tasks')
+    )
+    deleted_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include deleted tasks',
+        validation_alias=pydantic.AliasChoices('deleted-tasks')
+    )
+    max_age: typing.Optional[int] = pydantic.Field(
+        default=None,
+        description='Filter tasks an include only those that has been changed in the last N days',
+        validation_alias=pydantic.AliasChoices('max-age')
+    )
 
 
 class ToDoRepeatCommandModel(pydantic.BaseModel):
@@ -396,33 +415,69 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         original_tasks = storage.load_tasks()
 
-        tasks = []
+        print(f'Task add act comp -- {self._args.list.active_tasks}')
 
-        if any((
+        tasks = []
+        tasks_statuses: typing.Dict[uuid.UUID, TaskStatus] = dict()
+        td_now = todo_models_now()
+        td_filter: typing.Optional[datetime.datetime] = None
+        if self._args.list.max_age:
+            td_filter = (td_now - datetime.timedelta(days=self._args.list.max_age))
+
+        if self._args.list.active_tasks or self._args.list.completed_tasks or self._args.list.deleted_tasks or any((
             self._args.list.id,
             self._args.list.title,
             self._args.list.project,
             self._args.list.priority,
-            self._args.list.tags
+            self._args.list.tags,
+            td_filter
         )):
             for t in original_tasks:
 
-                if self._args.list.id and str(t.id).startswith(self._args.list.id):
-                    tasks.append(t)
+                if self._args.list.id and not str(t.id).startswith(self._args.list.id):
+                    continue
 
-                if self._args.list.title and t.title == self._args.list.title:
-                    tasks.append(t)
+                if self._args.list.title and not t.title == self._args.list.title:
+                    continue
 
-                if self._args.list.project and t.project in self._args.list.project:
-                    tasks.append(t)
+                if self._args.list.project and t.project not in self._args.list.project:
+                    continue
 
-                if self._args.list.priority and t.priority in self._args.list.priority:
-                    tasks.append(t)
+                if self._args.list.priority and t.priority not in self._args.list.priority:
+                    continue
 
-                if self._args.list.tags and t.tags and set(self._args.list.tags).intersection(t.tags):
-                    tasks.append(t)
+                if self._args.list.tags and t.tags and not (set(self._args.list.tags).intersection(t.tags)):
+                    continue
+
+                if td_filter and td_filter > t.updated_at:
+                    continue
+
+                task_status = storage.task_status(t.id)
+
+                is_active = task_status in (TaskStatus.pending, TaskStatus.in_progress)
+                is_completed = task_status in (TaskStatus.done, TaskStatus.cancelled, TaskStatus.skipped)
+                is_deleted = (task_status == TaskStatus.deleted)
+
+                if any((
+                    self._args.list.active_tasks,
+                    self._args.list.completed_tasks,
+                    self._args.list.deleted_tasks
+                )) and not any((
+                    self._args.list.active_tasks and is_active,
+                    self._args.list.completed_tasks and is_completed,
+                    self._args.list.deleted_tasks and is_deleted,
+                )):
+                    continue
+
+                tasks_statuses[t.id] = task_status
+                tasks.append(t)
+
         else:
             tasks = original_tasks
+
+        if tasks and not tasks_statuses:
+            for t in tasks:
+                tasks_statuses[t.id] = storage.task_status(t.id)
 
         return LobbyTableFeedbackResult(
             plugin_version=__plugin_version__,
@@ -431,7 +486,7 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
                 'id': [x.id for x in tasks],
                 'project': [x.project for x in tasks],
                 'priority': [x.priority.value for x in tasks],
-                'status': [str(storage.task_status(x.id).value) for x in tasks]
+                'status': [str(tasks_statuses[x.id].value) for x in tasks]
             }
         )
 
