@@ -327,7 +327,9 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
                 latest_states[h.task_id] = h
 
         for task in (x for x in self.load_tasks() if x.recurrence_rule_id):
-            assert(task.recurrence_rule_id)
+
+            if task.recurrence_rule_id is None:
+                raise RuntimeError('Logic error -- a task without recurrence rule spotted')
 
             orphaned_rules.remove(task.recurrence_rule_id)
             rule = rules[task.recurrence_rule_id]
@@ -386,5 +388,4 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         while result < previous_state.created_at:
             result = next(rrule_iter)
 
-        assert(isinstance(result, datetime.datetime))
         return result

@@ -108,8 +108,10 @@ class StorageLock:
 
             with self.__thread_lock:
                 if flock_succeded:
-                    assert(fd is not None)
-                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    if fd is None:
+                        RuntimeError('Required file descriptor is not found')
+
+                    fcntl.flock(fd, fcntl.LOCK_UN)  # type: ignore[arg-type]
                 if fd is not None:
                     os.close(fd)
 
@@ -454,7 +456,9 @@ class JsonStorage(PlainStorageProto):
             raise ValueError(f'A directory path was not specified with URI -- {storage_uri}')
 
         self.__data_dir = pathlib.Path('/') / pathlib.Path(storage_uri.path)
-        assert(self.__data_dir.is_absolute())
+
+        if not self.__data_dir.is_absolute():
+            RuntimeError('Data directory path must be an absolute')
 
         if self.__data_dir.exists() and not self.__data_dir.is_dir():
             raise ValueError(f'Storage directory exists and this is not a directory -- {self.__data_dir}')
