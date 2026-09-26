@@ -259,7 +259,9 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
         :return: Command execution result containing feedback string or table data.
         :raises ValueError: If an unknown or unhandled subcommand is received.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
+
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
 
         caller = None
 
@@ -290,7 +292,8 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: ToDo storage instance implementing ToDoStorageProto.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
 
         storage_uri = URI.parse(self._args.storage_uri)
         return storage_factory(storage_uri)
@@ -300,8 +303,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Feedback result indicating task creation.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.add)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.add is None:
+            raise ValueError('Required arguments was not found')
 
         storage = self.__storage()
         task = Task(
@@ -357,8 +363,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Feedback result indicating task deletion.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.delete)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.delete is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.delete.task)
         storage = self.__storage()
@@ -374,8 +383,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Feedback result indicating task status update.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.status)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.status is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.status.task)
         storage = self.__storage()
@@ -391,8 +403,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Feedback result indicating task completion.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.done)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.done is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.done.task)
         storage = self.__storage()
@@ -408,8 +423,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Table feedback result containing matching tasks.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.list)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.list is None:
+            raise ValueError('Required arguments was not found')
 
         storage = self.__storage()
 
@@ -495,8 +513,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Feedback result indicating recurrence rule configuration.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.repeat)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.repeat is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.repeat.task)
 
@@ -519,8 +540,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Key-value feedback result containing task details.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.show)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.show is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.show.task)
         storage = self.__storage()
@@ -566,8 +590,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         :return: Table feedback result containing status history events.
         """
-        assert(isinstance(self._args, ToDoCommandModel))
-        assert(self._args.history)
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        if self._args.history is None:
+            raise ValueError('Required arguments was not found')
 
         task = self.__select_single_task(self._args.history.task)
         storage = self.__storage()
