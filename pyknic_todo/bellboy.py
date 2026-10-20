@@ -173,6 +173,11 @@ class ToDoListCommandModel(pydantic.BaseModel):
         description='Filter tasks an include only those that has been changed in the last N days',
         validation_alias=pydantic.AliasChoices('max-age')
     )
+    full_id: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Display full UUID instead of the first 8 characters.',
+        validation_alias=pydantic.AliasChoices('full-id')
+    )
 
 
 class ToDoRepeatCommandModel(pydantic.BaseModel):
@@ -499,10 +504,11 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             plugin_version=__plugin_version__,
             table_result={
                 'title': [x.title for x in tasks],
-                'id': [x.id for x in tasks],
+                'id': [str(x.id) if self._args.list.full_id else str(x.id)[:8] for x in tasks],
                 'project': [x.project for x in tasks],
                 'priority': [x.priority.value for x in tasks],
-                'status': [str(tasks_statuses[x.id].value) for x in tasks]
+                'status': [str(tasks_statuses[x.id].value) for x in tasks],
+                'repeating': [x.recurrence_rule_id is not None for x in tasks],
             }
         )
 
