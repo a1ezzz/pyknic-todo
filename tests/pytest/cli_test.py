@@ -188,3 +188,83 @@ class TestCLI:
         assert(len(tbl["status"]) == 3)
         assert(tbl["comment"][1] == "Starting work")
         assert(tbl["comment"][2] == "No longer needed")
+
+    def test_cli_list_full_id_and_repeating(self, json_tmp_uri: URI) -> None:
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+
+        main([storage_arg, "add", "-t", "Repeating Task"])
+        main([storage_arg, "add", "-t", "One-off Task"])
+
+        storage = JsonStorage(json_tmp_uri)
+        tasks = storage.load_tasks()
+        t_repeat = next(t for t in tasks if t.title == "Repeating Task")
+        t_oneoff = next(t for t in tasks if t.title == "One-off Task")
+
+        main([
+            storage_arg,
+            "repeat",
+            "--task.id",
+            str(t_repeat.id)[:8],
+            "--schedule-type",
+            "cron",
+            "--schedule",
+            "0 9 * * 1",
+        ])
+
+        # Default list: short 8-char IDs, repeating column
+        buf = io.StringIO()
+        with patch("sys.stdout", buf):
+            code = main([storage_arg, "--json-mode", "list"])
+        assert(code == 0)
+        data = json.loads(buf.getvalue())
+        tbl = data["table_result"]
+
+        assert("repeating" in tbl)
+        assert("id" in tbl)
+
+        # Map by title
+        items = {
+            tbl["title"][i]: (tbl["id"][i], tbl["repeating"][i])
+            for i in range(len(tbl["title"]))
+        }
+        assert(items["Repeating Task"][0] == str(t_repeat.id)[:8])
+        assert(items["Repeating Task"][1] is True)
+        assert(len(items["Repeating Task"][0]) == 8)
+
+        assert(items["One-off Task"][0] == str(t_oneoff.id)[:8])
+        assert(items["One-off Task"][1] is False)
+        assert(len(items["One-off Task"][0]) == 8)
+
+        # List with --full-id
+        buf_full = io.StringIO()
+        with patch("sys.stdout", buf_full):
+            code = main([storage_arg, "--json-mode", "list", "--full-id"])
+        assert(code == 0)
+        data_full = json.loads(buf_full.getvalue())
+        tbl_full = data_full["table_result"]
+
+        items_full = {
+            tbl_full["title"][i]: (tbl_full["id"][i], tbl_full["repeating"][i])
+            for i in range(len(tbl_full["title"]))
+        }
+        assert(items_full["Repeating Task"][0] == str(t_repeat.id))
+        assert(items_full["Repeating Task"][1] is True)
+        assert(len(items_full["Repeating Task"][0]) == 36)
+
+        assert(items_full["One-off Task"][0] == str(t_oneoff.id))
+        assert(items_full["One-off Task"][1] is False)
+        assert(len(items_full["One-off Task"][0]) == 36)
+
+        # Table output check (non-json mode)
+        buf_table = io.StringIO()
+        with patch("sys.stdout", buf_table):
+            code = main([storage_arg, "list"])
+        assert(code == 0)
+        assert(str(t_repeat.id)[:8] in buf_table.getvalue())
+        assert(str(t_repeat.id)[:14] not in buf_table.getvalue())
+
+        buf_table_full = io.StringIO()
+        with patch("sys.stdout", buf_table_full):
+            code = main([storage_arg, "list", "--full-id"])
+        assert(code == 0)
+        assert(str(t_repeat.id)[:14] in buf_table_full.getvalue())
