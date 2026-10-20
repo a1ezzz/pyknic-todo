@@ -433,8 +433,6 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         original_tasks = storage.load_tasks()
 
-        print(f'Task add act comp -- {self._args.list.active_tasks}')
-
         tasks = []
         tasks_statuses: typing.Dict[uuid.UUID, TaskStatus] = dict()
         td_now = todo_models_now()
