@@ -206,6 +206,11 @@ class _BaseJsonEntityStorage:
                 file_data = f.read()
                 return self.__model_cls.model_validate_json(file_data)  # type: ignore[no-any-return]
 
+    def _init_data(self) -> str:
+        """ Return a string that represent a default content for a new JSON-file
+        """
+        return ''
+
     def _ensure_file(self) -> None:
         """Check if there is a file and create an empty one if the file doesn't exist
         """
@@ -215,7 +220,7 @@ class _BaseJsonEntityStorage:
 
             if not self.__file_path.exists():
                 with open(self.__file_path, "a", encoding="utf-8") as f:
-                    f.write('')
+                    f.write(self._init_data())
 
 
 class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
@@ -416,7 +421,7 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
             self,
             data_dir=data_dir,
             file_type=JsonFile.settings,
-            lock=lock,
+            lock=lock
         )
 
         self.__settings: ToDoStorageSettings = self._read_single_obj_json()  # type: ignore[assignment]
@@ -426,13 +431,14 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
         """
         return self.__settings.id
 
-    def _ensure_file(self) -> None:
-        """ This overriden :meth:`._BaseJsonEntityStorage._ensure_file` method that writes settings defaults
+    def _init_data(self) -> str:
+        """ This overriden :meth:`._BaseJsonEntityStorage._init_data` method that returns settings defaults
         """
         default_settings = ToDoStorageSettings(
             comment="JSON-file storage"
         )
-        self._write_single_obj_json(default_settings)
+
+        return default_settings.model_dump_json()
 
 
 __json_storage_scheme__ = 'json+file'

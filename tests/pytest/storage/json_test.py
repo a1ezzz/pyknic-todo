@@ -15,7 +15,7 @@ from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainRecurrenceRule
 from pyknic_todo.storage.plain import PlainStateHistoryStorageProto, PlainStorageProto
 
 from pyknic_todo.storage.json import StorageLock, JsonTaskStorage, JsonRecurrenceRuleStorage, JsonHistoryStorage
-from pyknic_todo.storage.json import JsonStorage, JsonFile, __json_storage_scheme__
+from pyknic_todo.storage.json import JsonStorage, JsonFile, JsonSettingsStorage, __json_storage_scheme__
 
 
 def _concurrent_create_worker(storage_uri: URI, index: int) -> None:
@@ -233,6 +233,24 @@ class TestJsonHistoryStorage:
         history = hs.find_events_for_task(str(task_id)[:8])
         assert(len(history) == 1)
         assert(history[0].comment == state_comment)
+
+
+class TestJsonSettingsStorage:
+
+    def test(self, tmp_path: pathlib.Path) -> None:
+        storage = JsonSettingsStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+
+        assert(isinstance(storage, JsonSettingsStorage))
+
+        assert((tmp_path / JsonFile.tasks.value).exists() is False)
+        assert((tmp_path / JsonFile.recurrence_rules.value).exists() is False)
+        assert((tmp_path / JsonFile.states_history.value).exists() is False)
+        assert((tmp_path / JsonFile.settings.value).exists() is True)
+
+        init_id = storage.storage_id()
+
+        storage = JsonSettingsStorage(tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
+        assert(init_id == storage.storage_id())
 
 
 class TestJsonStorage:
