@@ -317,7 +317,6 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         current_task_ids = [x.id for x in current_recurrences_task]
 
         rules = {x.id: x for x in self.load_recurrence_rules()}
-        orphaned_rules = set(rules.keys())
 
         now_dt = todo_models_now()
 
@@ -326,12 +325,12 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
             if h.task_id in current_task_ids:
                 latest_states[h.task_id] = h
 
-        for task in (x for x in self.load_tasks() if x.recurrence_rule_id):
+        for task in (x for x in self.load_tasks() if x.deleted_at is None and x.recurrence_rule_id is not None):
 
             if task.recurrence_rule_id is None:
+                # this is for linters only!
                 raise RuntimeError('Logic error -- a task without recurrence rule spotted')
 
-            orphaned_rules.remove(task.recurrence_rule_id)
             rule = rules[task.recurrence_rule_id]
 
             if rule.until_date and rule.until_date < now_dt:
@@ -361,8 +360,6 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
                     next_state=TaskStatus.pending,
                     comment=f'The recurrence rule "{str(rule.id)[:8]}" triggered'
                 ))
-
-        self.save_recurrence_rules([x for x in rules.values() if x.id not in orphaned_rules])
 
     def _next_cron_statest(
             self, task: Task, rule: RecurrenceRule, previous_state: StateUpdatedEvent

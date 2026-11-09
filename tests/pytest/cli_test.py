@@ -268,3 +268,32 @@ class TestCLI:
             code = main([storage_arg, "list", "--full-id"])
         assert(code == 0)
         assert(str(t_repeat.id)[:14] in buf_table_full.getvalue())
+
+    def test_repeating_task_removed(self, json_tmp_uri: URI) -> None:
+        # There was a problem so check this to not to regress.
+        # Problem:
+        #   - create a task
+        #   - create some repeating schedule for the task
+        #   - delete the task
+        #   - KeyError: UUID(<repeating rule id>) is raised (but is shouldn't be)
+
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+        main([storage_arg, "add", "-t", "Repeating Task"])
+
+        storage = JsonStorage(json_tmp_uri)
+        task = storage.load_tasks()[0]
+
+        main([
+            storage_arg,
+            "repeat",
+            "--task.id",
+            str(task.id)[:8],
+            "--schedule-type",
+            "cron",
+            "--schedule",
+            "0 9 * * 1",
+        ])
+
+        main([storage_arg, "delete", "--task.id", str(task.id)[:8]])
+
+        main([storage_arg, "list"])  # check that this is ok!
