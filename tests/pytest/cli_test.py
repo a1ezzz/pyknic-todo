@@ -147,6 +147,91 @@ class TestCLI:
         tasks = storage.load_tasks()
         assert(storage.task_status(tasks[0].id) == TaskStatus.deleted)
 
+    def test_cli_multiple_tasks_args(self, json_tmp_uri: URI) -> None:
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+
+        main([storage_arg, "add", "-t", "Title 1"])
+        main([storage_arg, "add", "-t", "Title 2"])
+
+        tasks = JsonStorage(json_tmp_uri).load_tasks()
+        assert(len(tasks) == 2)
+
+        # test unknown title
+        with pytest.raises(ValueError):
+            main([
+                storage_arg,
+                "status",
+                "-s",
+                "in_progress",
+                "--task.title",
+                'Unknown-title1,Unknown-title2'
+            ])
+
+        # test unknown ids
+        with pytest.raises(ValueError):
+            main([
+                storage_arg,
+                "status",
+                "-s",
+                "in_progress",
+                "--task.id",
+                'ffff,eeee'
+            ])
+
+        for t in tasks:
+            assert(JsonStorage(json_tmp_uri).task_status(t.id) == TaskStatus.pending)
+            assert(t.recurrence_rule_id is None)
+
+        main([
+            storage_arg,
+            "status",
+            "-s",
+            "in_progress",
+            "--task.id",
+            ','.join([str(x.id)[:8] for x in tasks])
+        ])
+
+        for t in tasks:
+            assert(JsonStorage(json_tmp_uri).task_status(t.id) == TaskStatus.in_progress)
+
+        main([
+            storage_arg,
+            "repeat",
+            "--schedule-type",
+            "cron",
+            "--schedule",
+            "0 9 * * 1",
+            "--task.id",
+            ','.join([str(x.id)[:8] for x in tasks])
+        ])
+
+        tasks = JsonStorage(json_tmp_uri).load_tasks()
+        assert(len(tasks) == 2)
+        for t in tasks:
+            assert(t.recurrence_rule_id is not None)
+
+        main([
+            storage_arg,
+            "done",
+            "--task.id",
+            ','.join([str(x.id)[:8] for x in tasks])
+        ])
+
+        for t in tasks:
+            assert(JsonStorage(json_tmp_uri).task_status(t.id) == TaskStatus.done)
+
+        main([
+            storage_arg,
+            "delete",
+            "--task.title",
+            ','.join([x.title for x in tasks])
+        ])
+
+        tasks = JsonStorage(json_tmp_uri).load_tasks()
+        assert(len(tasks) == 2)
+        for t in tasks:
+            assert(JsonStorage(json_tmp_uri).task_status(t.id) == TaskStatus.deleted)
+
     def test_cli_show_details_and_ambiguity(self, json_tmp_uri: URI) -> None:
         storage_arg = f"--storage-uri={str(json_tmp_uri)}"
 
