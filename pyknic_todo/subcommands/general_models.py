@@ -26,6 +26,8 @@ import typing
 import pydantic
 import pydantic_settings
 
+from pyknic_todo.models import TaskPriority
+
 
 class ToDoSingleTaskSelectModel(pydantic_settings.CliMutuallyExclusiveGroup):
     """Mutually exclusive a single task selector by ID prefix or exact title."""
@@ -50,4 +52,42 @@ class ToDoTasksListSelectModel(pydantic_settings.CliMutuallyExclusiveGroup):
     title: typing.Optional[typing.List[str]] = pydantic.Field(
         default=None,
         description='Exact titles of tasks.',
+    )
+
+
+class ToDoTaskSelectorCommandModel(pydantic.BaseModel):
+    """General tasks selector model"""
+
+    priority: typing.Optional[typing.List[TaskPriority]] = pydantic.Field(
+        default=None,
+        description='Filter tasks matching one of the specified priorities.',
+    )
+
+    tags: typing.Optional[typing.List[str]] = pydantic.Field(
+        default=None,
+        description='Filter tasks that share at least one of the specified tags.',
+    )
+
+    active_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include only those that are in progress or are pending',
+        validation_alias=pydantic.AliasChoices('active-tasks')
+    )
+
+    completed_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include only those that are cancelled, skipped or are done',
+        validation_alias=pydantic.AliasChoices('completed-tasks')
+    )
+
+    deleted_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Filter tasks and include deleted tasks',
+        validation_alias=pydantic.AliasChoices('deleted-tasks')
+    )
+
+    max_age: typing.Optional[int] = pydantic.Field(
+        default=None,
+        description='Filter tasks an include only those that has been changed in the last N days',
+        validation_alias=pydantic.AliasChoices('max-age')
     )
