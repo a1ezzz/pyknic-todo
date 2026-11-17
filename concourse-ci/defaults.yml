@@ -8,6 +8,7 @@ ci_repo_branch: "main"
 tg_api_host: "api.telegram.org"
 
 supported_python_version:
+  - "3.15"
   - "3.14"
   - "3.13"
   - "3.12"
