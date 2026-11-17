@@ -2,9 +2,15 @@
 
 import io
 import json
+import typing
+
 from unittest.mock import patch
 
 import pytest
+
+if typing.TYPE_CHECKING:
+    from _pytest.capture import CaptureFixture
+
 from pyknic.lib.uri import URI
 
 from pyknic_todo.cli import main
@@ -382,3 +388,32 @@ class TestCLI:
         main([storage_arg, "delete", "--task.id", str(task.id)[:8]])
 
         main([storage_arg, "list"])  # check that this is ok!
+
+    def test_cli_projects_cmd(self, json_tmp_uri: URI, capsys: 'CaptureFixture[typing.Any]') -> None:
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+
+        code = main([storage_arg, "add", "-t", "Write docs", "-p", "high", "--tags", "docs,work"])
+        assert(code == 0)
+
+        code = main([storage_arg, "add", "-t", "Do some", "--project", "pr1"])
+        assert(code == 0)
+
+        code = main([storage_arg, "add", "-t", "Do some more", "--project", "pr2", "--tags", "work"])
+        assert(code == 0)
+
+        captures = capsys.readouterr()  # flushes the stdout
+
+        code = main([storage_arg, "projects"])
+        assert(code == 0)
+
+        captures = capsys.readouterr()
+        assert('pr1' in captures.out)
+        assert('pr2' in captures.out)
+
+        code = main([storage_arg, "projects", "--tags", "work"])
+        assert(code == 0)
+
+        captures = capsys.readouterr()
+
+        assert('pr1' not in captures.out)
+        assert('pr2' in captures.out)

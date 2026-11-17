@@ -30,13 +30,14 @@ import pydantic_settings
 
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyTableFeedbackResult
 
-from pyknic_todo.models import TaskPriority, TaskStatus, todo_models_now
+from pyknic_todo.models import TaskStatus, todo_models_now
 from pyknic_todo.storage.proto import ToDoStorageProto
 
 from .common import __plugin_version__
+from .general_models import ToDoTaskSelectorCommandModel
 
 
-class ToDoListCommandModel(pydantic.BaseModel):
+class ToDoListCommandModel(ToDoTaskSelectorCommandModel):
     """List and filter tasks."""
 
     id: typing.Optional[str] = pydantic.Field(
@@ -50,34 +51,6 @@ class ToDoListCommandModel(pydantic.BaseModel):
     project: typing.Optional[typing.List[str]] = pydantic.Field(
         default=None,
         description='Filter tasks belonging to one of the specified projects.',
-    )
-    priority: typing.Optional[typing.List[TaskPriority]] = pydantic.Field(
-        default=None,
-        description='Filter tasks matching one of the specified priorities.',
-    )
-    tags: typing.Optional[typing.List[str]] = pydantic.Field(
-        default=None,
-        description='Filter tasks that share at least one of the specified tags.',
-    )
-    active_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
-        default=False,
-        description='Filter tasks and include only those that are in progress or are pending',
-        validation_alias=pydantic.AliasChoices('active-tasks')
-    )
-    completed_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
-        default=False,
-        description='Filter tasks and include only those that are cancelled, skipped or are done',
-        validation_alias=pydantic.AliasChoices('completed-tasks')
-    )
-    deleted_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
-        default=False,
-        description='Filter tasks and include deleted tasks',
-        validation_alias=pydantic.AliasChoices('deleted-tasks')
-    )
-    max_age: typing.Optional[int] = pydantic.Field(
-        default=None,
-        description='Filter tasks an include only those that has been changed in the last N days',
-        validation_alias=pydantic.AliasChoices('max-age')
     )
     full_id: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
         default=False,
@@ -120,7 +93,7 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
             if args.id and not str(t.id).startswith(args.id):
                 continue
 
-            if args.title and not t.title == args.title:
+            if args.title and t.title != args.title:
                 continue
 
             if args.project and t.project not in args.project:
@@ -129,7 +102,7 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
             if args.priority and t.priority not in args.priority:
                 continue
 
-            if args.tags and t.tags and not (set(args.tags).intersection(t.tags)):
+            if args.tags and not t.tags and not (set(args.tags).intersection(t.tags)):
                 continue
 
             if td_filter and td_filter > t.updated_at:
