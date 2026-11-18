@@ -1,0 +1,5 @@
+
+recursive-include pyknic_todo *.yaml
+recursive-include pyknic_todo *.yml
+
+include pyknic_todo/py.typed

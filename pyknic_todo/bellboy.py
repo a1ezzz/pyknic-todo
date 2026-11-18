@@ -24,11 +24,13 @@
 """BellBoy integration plugin and CLI command handler for pyknic-todo."""
 
 import functools
+import pathlib
 import typing
 
 import pydantic
 import pydantic_settings
 
+from pyknic.lib.config import Config
 from pyknic.lib.uri import URI
 from pyknic.lib.bellboy.app import register_bellboy_command, BellBoyCommandHandler
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult
@@ -36,6 +38,7 @@ from pyknic.lib.io.aio_wrapper import AsyncWrapper
 
 from pyknic_todo.storage.storage import storage_factory
 from pyknic_todo.storage.proto import ToDoStorageProto
+from pyknic_todo.path import root_path
 
 import pyknic_todo.storage.json  # noqa: F401, E402  # forces json-storage
 
@@ -58,9 +61,16 @@ def init_plugin() -> None:
 class ToDoCommandModel(pydantic.BaseModel):
     """Root command model for pyknic-todo BellBoy operations."""
 
-    storage_uri: str = pydantic.Field(
+    todo_config: str = pydantic.Field(
+        description='Configuration file. By default, the one from a current working directory is used',
+        validation_alias=pydantic.AliasChoices('todo-config'),
+        default='./.pyknic-todo.yaml'
+    )
+
+    storage_uri: typing.Optional[str] = pydantic.Field(
         description='URI of the task storage backend (e.g. json+file:///path/to/storage).',
         validation_alias=pydantic.AliasChoices('storage-uri'),
+        default=None
     )
     add: pydantic_settings.CliSubCommand[ToDoAddCommandModel]
     delete: pydantic_settings.CliSubCommand[ToDoDeleteCommandModel]
@@ -129,6 +139,26 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         return await caller()  # type: ignore[no-any-return]
 
+    def __config(self) -> Config:
+        if not isinstance(self._args, ToDoCommandModel):
+            raise TypeError('Invalid command arguments type')
+
+        config = Config()
+        with (root_path / 'default_config.yaml').open() as f:
+            config.merge_file(f)
+
+        if self._args.todo_config:
+            config_file = pathlib.Path(self._args.todo_config)
+
+            default_path = ToDoCommandModel.model_fields['todo_config'].get_default()
+            if self._args.todo_config == default_path and not config_file.exists():
+                return config
+
+            with config_file.open() as f:
+                config.merge_file(f)
+
+        return config
+
     def __storage(self) -> ToDoStorageProto:
         """Initialize and return a storage backend instance from the storage URI argument.
 
@@ -137,5 +167,12 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
         if not isinstance(self._args, ToDoCommandModel):
             raise TypeError('Invalid command arguments type')
 
-        storage_uri = URI.parse(self._args.storage_uri)
+        config = self.__config()
+        default_storage = config['storage-uri'].as_str() if not config['storage-uri'].is_none() else None
+        storage_str = self._args.storage_uri or default_storage
+
+        if storage_str is None:
+            raise ValueError('Storage URI was not set! You should you a cli argument or a configuration file')
+
+        storage_uri = URI.parse(storage_str)
         return storage_factory(storage_uri)

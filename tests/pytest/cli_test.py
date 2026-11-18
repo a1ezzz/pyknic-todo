@@ -2,6 +2,7 @@
 
 import io
 import json
+import pathlib
 import typing
 
 from unittest.mock import patch
@@ -13,6 +14,7 @@ if typing.TYPE_CHECKING:
 
 from pyknic.lib.uri import URI
 
+from pyknic_todo.bellboy import ToDoCommandModel
 from pyknic_todo.cli import main
 from pyknic_todo.models import TaskPriority, RecurrenceScheduleType, TaskStatus
 
@@ -417,3 +419,19 @@ class TestCLI:
 
         assert('pr1' not in captures.out)
         assert('pr2' in captures.out)
+
+    def test_cli_config(self, json_tmp_uri: URI, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+        monkeypatch.chdir(str(tmp_path))
+
+        with pytest.raises(ValueError):
+            main(["list"])
+
+        with open(ToDoCommandModel.model_fields['todo_config'].get_default(), 'w') as f:
+            f.write(
+                f"""
+storage-uri: "{str(json_tmp_uri)}"
+                """
+            )
+
+        main(["list"])  # this is ok now, since there is a default config file
