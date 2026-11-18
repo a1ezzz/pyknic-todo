@@ -69,7 +69,7 @@ class ToDoTaskSelectorCommandModel(pydantic.BaseModel):
     )
 
     active_tasks: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
-        default=False,
+        default=True,
         description='Filter tasks and include only those that are in progress or are pending',
         validation_alias=pydantic.AliasChoices('active-tasks')
     )
