@@ -34,7 +34,7 @@ import pydantic
 from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, TaskStatus, ToDoStorageSettings
+from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings
 
 from .helpers import partial_uuid_select
 
