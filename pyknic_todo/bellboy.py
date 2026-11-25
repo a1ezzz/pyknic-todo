@@ -42,6 +42,7 @@ from pyknic_todo.path import root_path
 
 import pyknic_todo.storage.json  # noqa: F401, E402  # forces json-storage
 
+# TODO: make it through a APIRegistry
 from pyknic_todo.subcommands.add_cmd import ToDoAddCommandModel, add_task
 from pyknic_todo.subcommands.delete_cmd import ToDoDeleteCommandModel, delete_tasks
 from pyknic_todo.subcommands.done_cmd import ToDoDoneCommandModel, done_tasks
@@ -51,6 +52,7 @@ from pyknic_todo.subcommands.projects_cmd import ToDoProjectsCommandModel, list_
 from pyknic_todo.subcommands.repeat_cmd import ToDoRepeatCommandModel, repeat_task
 from pyknic_todo.subcommands.show_cmd import ToDoShowCommandModel, show_task
 from pyknic_todo.subcommands.status_cmd import ToDoStatusCommandModel, tasks_status
+from pyknic_todo.subcommands.update_cmd import ToDoUpdateCommandModel, update_task
 
 
 def init_plugin() -> None:
@@ -74,13 +76,14 @@ class ToDoCommandModel(pydantic.BaseModel):
     )
     add: pydantic_settings.CliSubCommand[ToDoAddCommandModel]
     delete: pydantic_settings.CliSubCommand[ToDoDeleteCommandModel]
-    status: pydantic_settings.CliSubCommand[ToDoStatusCommandModel]
     done: pydantic_settings.CliSubCommand[ToDoDoneCommandModel]
+    history: pydantic_settings.CliSubCommand[ToDoHistoryCommandModel]
     list: pydantic_settings.CliSubCommand[ToDoListCommandModel]
     projects: pydantic_settings.CliSubCommand[ToDoProjectsCommandModel]
     repeat: pydantic_settings.CliSubCommand[ToDoRepeatCommandModel]
     show: pydantic_settings.CliSubCommand[ToDoShowCommandModel]
-    history: pydantic_settings.CliSubCommand[ToDoHistoryCommandModel]
+    status: pydantic_settings.CliSubCommand[ToDoStatusCommandModel]
+    update: pydantic_settings.CliSubCommand[ToDoUpdateCommandModel]
 
 
 class BellBoyToDoCommand(BellBoyCommandHandler):
@@ -133,6 +136,8 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             caller = await AsyncWrapper.create(functools.partial(show_task, self.__storage(), self._args.show))
         elif self._args.history:
             caller = await AsyncWrapper.create(functools.partial(task_history, self.__storage(), self._args.history))
+        elif self._args.update:
+            caller = await AsyncWrapper.create(functools.partial(update_task, self.__storage(), self._args.update))
 
         if caller is None:
             raise ValueError('Unknown subcommand spotted!')

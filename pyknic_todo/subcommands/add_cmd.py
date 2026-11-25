@@ -23,42 +23,19 @@
 
 import typing
 
-import pydantic
-
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedbackResult
 
-from pyknic_todo.models import TaskPriority, Task
+from pyknic_todo.models import Task
 from pyknic_todo.storage.proto import ToDoStorageProto
 
 from .common import __plugin_version__
+from .general_models import ToDoUpsertCommandModel
 
 
-class ToDoAddCommandModel(pydantic.BaseModel):
+class ToDoAddCommandModel(ToDoUpsertCommandModel):
     """Add a new task to the storage."""
 
-    title: str = pydantic.Field(
-        description='Title or summary of the task.',
-        validation_alias=pydantic.AliasChoices('t', 'title'),
-    )
-    project: typing.Optional[str] = pydantic.Field(
-        default=None,
-        description='Optional project name for grouping related tasks.',
-    )
-    description: str = pydantic.Field(
-        default='',
-        description='Detailed description of the task.',
-    )
-    priority: TaskPriority = pydantic.Field(
-        default=TaskPriority.medium,
-        description='Priority level of the task (low, medium, high, urgent).',
-        validation_alias=pydantic.AliasChoices('p', 'priority'),
-    )
-    tags: typing.List[str] = pydantic.Field(
-        default_factory=list,
-        description='List of tags or labels categorizing the task.',
-    )
-
-    # due_date:  # TODO: uncomment and process it
+    pass
 
 
 def add_task(storage: ToDoStorageProto, args: typing.Optional[ToDoAddCommandModel]) -> LobbyCommandResult:
@@ -81,7 +58,8 @@ def add_task(storage: ToDoStorageProto, args: typing.Optional[ToDoAddCommandMode
         tags=args.tags
     )
 
-    storage.append_task(task)
+    storage.record_task(task)
+
     return LobbyStrFeedbackResult(
         str_result=f'A new task was created -- {task.title} (id: {task.id}, '
         f'status: {storage.task_status(task.id)})',

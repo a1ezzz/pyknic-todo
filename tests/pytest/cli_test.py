@@ -391,6 +391,20 @@ class TestCLI:
 
         main([storage_arg, "list"])  # check that this is ok!
 
+    def test_update_task(self, json_tmp_uri: URI) -> None:
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+        main([storage_arg, "add", "-t", "Task 1"])
+
+        storage = JsonStorage(json_tmp_uri)
+        task = storage.load_tasks()[0]
+        assert(task.title == 'Task 1')
+
+        main([storage_arg, "update", "--task.id", str(task.id)[:8], '--title', 'Task 2'])
+
+        storage = JsonStorage(json_tmp_uri)
+        task = storage.load_tasks()[0]
+        assert(task.title == 'Task 2')
+
     def test_cli_projects_cmd(self, json_tmp_uri: URI, capsys: 'CaptureFixture[typing.Any]') -> None:
         storage_arg = f"--storage-uri={str(json_tmp_uri)}"
 

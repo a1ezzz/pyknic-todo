@@ -36,9 +36,9 @@ from pyknic.lib.uri import URI
 
 from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, TaskStatus, ToDoStorageSettings
 
-from .helpers import exact_one_task, partial_uuid_select
+from .helpers import partial_uuid_select
 
-from .plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto, PlainStateHistoryStorageProto
+from .plain import PlainTaskStorageProto, PlainStateHistoryStorageProto
 from .plain import PlainRecurrenceRuleStorageProto, PlainStorageProto, PlainSettingsStorageProto
 
 from .storage import __storage_registry__
@@ -170,7 +170,6 @@ class _BaseJsonEntityStorage:
 
         :param data: a new set of complete data to save
         """
-        # TODO: check that there is no duplicates (entries with the same id)
 
         with self.__lock_manager.lock():
             with open(self.__file_path, "w", encoding="utf-8") as f:
@@ -181,7 +180,6 @@ class _BaseJsonEntityStorage:
     def _append_json(self, data: pydantic.BaseModel) -> None:
         """Append a new object to a current set
         """
-        # TODO: check that there is no duplicates (entries with the same id)
 
         with self.__lock_manager.lock():
             with open(self.__file_path, "a", encoding="utf-8") as f:
@@ -226,43 +224,6 @@ class _BaseJsonEntityStorage:
 class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
     """Storage that saves :class:`.Task` objects"""
 
-    class UpdaterContext(TaskStorageUpdaterContextProto):
-        """The :class:`.TaskStorageUpdaterContextProto` implementation for the :class:`.JsonTaskStorage` class
-        """
-
-        def __init__(
-            self,
-            storage_id: uuid.UUID,
-            storage: PlainTaskStorageProto,
-            task_id_query: typing.Union[uuid.UUID, str],
-            query_full_match: bool = True
-        ):
-            """Create a new context manager
-
-            :param storage_id: idenitifies a storage that applies task changes
-            :param storage: original tasks storage
-            :param task_id_query: a task identifier (a partial uuid submittion is supported when
-            the "query_full_match" argument is False)
-            :param query_full_match: whether the "task_id_query" argument is a complete id or a partial one
-            """
-
-            TaskStorageUpdaterContextProto.__init__(self)
-            self.__storage_id = storage_id
-            self.__storage = storage
-            self.__all_tasks = self.__storage.load_tasks()
-            self.__task = exact_one_task(self.__all_tasks, task_id_query, query_full_match=query_full_match)
-
-        def __call__(self) -> Task:
-            """:meth:`.TaskStorageUpdaterContextProto.__call__` implementation
-            """
-            return self.__task
-
-        def commit(self) -> None:
-            """:meth:`.TaskStorageUpdaterContextProto.commit` implementation
-            """
-            self.__task.storage_origin = self.__storage_id
-            self.__storage.save_tasks(self.__all_tasks)
-
     def __init__(
         self,
         storage_id: uuid.UUID,
@@ -291,22 +252,8 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         """
         return self._read_json()
 
-    def save_tasks(self, tasks: typing.Sequence[Task]) -> None:
-        """ :meth:`.PlainTaskStorageProto.save_tasks` method implementation
-        """
-        self._write_json(tasks)
-
-    def updater_context(
-        self,
-        id_query: typing.Union[uuid.UUID, str],
-        query_full_match: bool = True
-    ) -> TaskStorageUpdaterContextProto:
-        """ :meth:`.PlainTaskStorageProto.updater_context` method implementation
-        """
-        return JsonTaskStorage.UpdaterContext(self.__storage_id, self, id_query, query_full_match=query_full_match)
-
-    def append_task(self, task: Task) -> None:
-        """ :meth:`.PlainTaskStorageProto.append_task` method implementation
+    def record_task(self, task: Task) -> None:
+        """ :meth:`.PlainTaskStorageProto.record_task` method implementation
         """
         task.storage_origin = self.__storage_id
         self._append_json(task)
@@ -337,15 +284,11 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
     def load_recurrence_rules(self) -> typing.List[RecurrenceRule]:
         """ :meth:`.PlainTaskStorageProto.load_recurrence_rules` method implementation
         """
+
         return self._read_json()
 
-    def save_recurrence_rules(self, rules: typing.List[RecurrenceRule]) -> None:
-        """ :meth:`.PlainTaskStorageProto.save_recurrence_rules` method implementation
-        """
-        self._write_json(rules)
-
-    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
-        """ :meth:`.PlainTaskStorageProto.append_recurrence_rule` method implementation
+    def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
+        """ :meth:`.PlainTaskStorageProto.record_recurrence_rule` method implementation
         """
         self._append_json(rule)
 
@@ -376,24 +319,15 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
 
         self.__storage_id = storage_id
 
-    def load_history(self) -> typing.List[StateUpdatedEvent]:
-        """ :meth:`.PlainStateHistoryStorageProto.load_history` method implementation
+    def load_states_history(self) -> typing.List[StateUpdatedEvent]:
+        """ :meth:`.PlainStateHistoryStorageProto.load_states_history` method implementation
         """
         return self._read_json()
 
     def find_events_for_task(self, task_id_query: typing.Union[uuid.UUID, str]) -> typing.List[StateUpdatedEvent]:
         """ :meth:`.PlainStateHistoryStorageProto.find_events_for_task` method implementation
         """
-        return [e for e in self.load_history() if partial_uuid_select(e.task_id, task_id_query)]
-
-    def task_latest_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
-        """ :meth:`.PlainStateHistoryStorageProto.task_latest_status` method implementation
-        """
-        events = self.find_events_for_task(task_id_query)
-        if events:
-            return (events[-1].next_state)
-
-        raise ValueError(f'Task id "{task_id_query}" was not found')
+        return [e for e in self.load_states_history() if partial_uuid_select(e.task_id, task_id_query)]
 
     def record_history_event(self, event: StateUpdatedEvent) -> None:
         """ :meth:`.PlainStateHistoryStorageProto.record_history_event` method implementation

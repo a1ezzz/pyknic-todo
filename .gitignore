@@ -10,3 +10,4 @@ dist
 docs/pytest
 docs/pytest-coverage.lcov
 docs/pytest-coverage.xml
+.vscode
