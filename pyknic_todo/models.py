@@ -133,6 +133,7 @@ class Task(pydantic.BaseModel):
     due_date: typing.Optional[datetime.datetime] = None
     tags: list[str] = pydantic.Field(default_factory=list)
     recurrence_rule_id: typing.Optional[uuid.UUID] = None
+    state_id: typing.Optional[uuid.UUID] = None
     version: int = pydantic.Field(default=1)
     created_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)
     updated_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)

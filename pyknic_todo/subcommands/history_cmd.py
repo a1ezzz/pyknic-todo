@@ -61,7 +61,7 @@ def task_history(storage: ToDoStorageProto, args: typing.Optional[ToDoHistoryCom
 
     task = select_single_task(storage, args.task)
 
-    all_history = storage.load_history()
+    all_history = storage.load_states_history()
     task_events = [e for e in all_history if e.task_id == task.id]
     task_events.sort(key=lambda e: e.created_at)
 

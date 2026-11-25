@@ -59,31 +59,22 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def save_tasks(self, tasks: list[Task]) -> None:
-        """Replace tasks and save them.
-
-        :param tasks: a new set of tasks (previous tasks will be discared)
-        """
-        # TODO: pretty rough method. Should be replaced in a future with more specific functions
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
         """Load all recurrence rules."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        """Replace recurrence rules and save them.
-
-        :param rules: a new set of rules (previous rules will be discared)
-        """
-        # TODO: pretty rough method. Should be replaced in a future with more specific functions
+    def load_states_history(self) -> list[StateUpdatedEvent]:
+        """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def load_history(self) -> list[StateUpdatedEvent]:
-        """Load all history events."""
+    def record_task(self, task: Task) -> None:
+        """Append a new task or update a previous one. A new state ('pending') for the task will be kept in a history
+        automatically.
+
+        :param task: a task to save
+        """
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
@@ -95,10 +86,10 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def append_task(self, task: Task) -> None:
-        """Append a new task. A new state ('new') for this task will be kept in a history automatically.
+    def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
+        """Append a new recurrence rule.
 
-        :param task: a task to save
+        :param rules: a new rule to append
         """
         raise NotImplementedError('This method is abstract')
 

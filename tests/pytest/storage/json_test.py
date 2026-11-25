@@ -20,7 +20,7 @@ from pyknic_todo.storage.json import JsonStorage, JsonFile, JsonSettingsStorage,
 
 def _concurrent_create_worker(storage_uri: URI, index: int) -> None:
     storage = JsonStorage(storage_uri)
-    storage.append_task(Task(title=f"Concurrent task {index}"))
+    storage.record_task(Task(title=f"Concurrent task {index}"))
 
 
 class TestStorageLock:
@@ -69,11 +69,11 @@ class TestJsonTaskStorage:
         assert(task1.storage_origin is None)
         assert(task2.storage_origin is None)
 
-        ts.append_task(task1)
+        ts.record_task(task1)
         assert(task1.storage_origin == storage_id)
         assert(task2.storage_origin is None)
 
-        ts.append_task(task2)
+        ts.record_task(task2)
         assert(task1.storage_origin == storage_id)
         assert(task2.storage_origin == storage_id)
 
@@ -84,47 +84,23 @@ class TestJsonTaskStorage:
         assert(tasks[1].title == "Isolated task #2")
         assert(tasks[1].priority == TaskPriority("low"))
 
-        ts.save_tasks([task2])
-        tasks = ts.load_tasks()
-        assert(len(tasks) == 1)
-        assert(tasks[0].title == "Isolated task #2")
-        assert(tasks[0].priority == TaskPriority("low"))
-
-    def test_context(self, tmp_path: pathlib.Path) -> None:
-        ts = JsonTaskStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
-
-        task = Task(
-            title="Isolated task",
-            description="Details",
-            priority=TaskPriority("high"),
-            tags=["iso"],
-        )
-        ts.append_task(task)
+        task2.title = "New Isolated task #2"
+        task2.description = "More details"
+        task2.priority = TaskPriority("high")
+        task2.version += 1
+        ts.record_task(task2)
 
         tasks = ts.load_tasks()
-        assert(len(tasks) == 1)
-        assert(tasks[0].title == "Isolated task")
-        assert(tasks[0].priority == TaskPriority("high"))
+        assert(len(tasks) == 3)
+        assert(tasks[0].id == task1.id)
+        assert(tasks[0].title == "Isolated task #1")
         assert(tasks[0].tags == ["iso"])
-
-        with ts.updater_context(str(task.id)[:8], query_full_match=False) as tc:
-            tc_task = tc()
-            assert(tc_task.title == "Isolated task")
-            assert(tc_task.priority == TaskPriority("high"))
-            assert(tc_task.tags == ["iso"])
-
-            tc_task.title = 'Updated task'
-            tc.commit()
-            tc_task.tags = ["foo"]
-            tc.commit()
-
-            tc_task.priority == TaskPriority("low")  # there is no commit, so change isn't saved
-
-        tasks = ts.load_tasks()
-        assert(len(tasks) == 1)
-        assert(tasks[0].title == "Updated task")
-        assert(tasks[0].priority == TaskPriority("high"))
-        assert(tasks[0].tags == ["foo"])
+        assert(tasks[1].id == task2.id)
+        assert(tasks[1].title == "Isolated task #2")
+        assert(tasks[1].priority == TaskPriority("low"))
+        assert(tasks[2].id == task2.id)
+        assert(tasks[2].title == "New Isolated task #2")
+        assert(tasks[2].priority == TaskPriority("high"))
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
         ts = JsonTaskStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
@@ -133,7 +109,7 @@ class TestJsonTaskStorage:
 
         The licenses for most software and other practical works are designed to take away your..."""
 
-        ts.append_task(Task(title="Isolated task", description=task_description))
+        ts.record_task(Task(title="Isolated task", description=task_description))
         assert(ts.load_tasks()[0].description == task_description)
 
 
@@ -158,18 +134,13 @@ class TestJsonRecurrenceRuleStorage:
             until_date='2025-05-25T05:25:25Z'  # type: ignore[arg-type]  # this is ok, this is a test!
         )
 
-        rs.append_recurrence_rule(rule1)
-        rs.append_recurrence_rule(rule2)
+        rs.record_recurrence_rule(rule1)
+        rs.record_recurrence_rule(rule2)
 
         rules = rs.load_recurrence_rules()
         assert(len(rules) == 2)
         assert(rules[0].schedule_type == RecurrenceScheduleType.cron)
         assert(rules[1].schedule_type == RecurrenceScheduleType.rrule)
-
-        rs.save_recurrence_rules([rule2])
-        rules = rs.load_recurrence_rules()
-        assert(len(rules) == 1)
-        assert(rules[0].schedule_type == RecurrenceScheduleType.rrule)
 
 
 class TestJsonHistoryStorage:
@@ -202,14 +173,12 @@ class TestJsonHistoryStorage:
         hs.record_history_event(state1)
         assert(state1.storage_origin == storage_id)
         assert(state2.storage_origin is None)
-        assert(hs.load_history() == [state1])
-        assert(hs.task_latest_status(task_id) == TaskStatus.in_progress)
+        assert(hs.load_states_history() == [state1])
 
         hs.record_history_event(state2)
         assert(state1.storage_origin == storage_id)
         assert(state2.storage_origin == storage_id)
-        assert(hs.load_history() == [state1, state2])
-        assert(hs.task_latest_status(task_id) == TaskStatus.done)
+        assert(hs.load_states_history() == [state1, state2])
 
     def test_multiline(self, tmp_path: pathlib.Path) -> None:
         hs = JsonHistoryStorage(uuid.uuid4(), tmp_path, lock=StorageLock(lock_file=(tmp_path / '.lock')))
@@ -227,8 +196,7 @@ class TestJsonHistoryStorage:
         )
 
         hs.record_history_event(state1)
-        assert(hs.load_history() == [state1])
-        assert(hs.task_latest_status(str(task_id)[:8]) == TaskStatus.in_progress)
+        assert(hs.load_states_history() == [state1])
 
         history = hs.find_events_for_task(str(task_id)[:8])
         assert(len(history) == 1)
@@ -279,7 +247,7 @@ class TestJsonStorage:
         )
 
         assert(task.storage_origin is None)
-        s.append_task(task)
+        s.record_task(task)
         assert(task.storage_origin == s.storage_id())
         assert(s.set_task_status(task.id, TaskStatus.cancelled))
         assert(s.task_status(str(task.id)[:8]) == TaskStatus.cancelled)
@@ -316,7 +284,7 @@ class TestJsonStorage:
         storage = JsonStorage(json_tmp_uri)
         tasks = storage.load_tasks()
         assert(len(tasks) == 10)
-        history = storage.load_history()
+        history = storage.load_states_history()
         assert(len(history) == 10)
 
     @pytest.mark.parametrize(
@@ -331,9 +299,9 @@ class TestJsonStorage:
         storage = JsonStorage(json_tmp_uri)
 
         task = Task(title="Sample task")
-        storage.append_task(task)  # this populates some fields like storage_origin
+        storage.record_task(task)  # this populates some fields like storage_origin
         assert(storage.task_status(task.id) == TaskStatus.pending)
-        events = storage.load_history()
+        events = storage.load_states_history()
         assert(len(events) == 1)
 
         cron_rrule = RecurrenceRule(
@@ -355,11 +323,11 @@ class TestJsonStorage:
         event.created_at = faked_creation_time
         assert(storage.task_status(task.id) == TaskStatus.pending)  # no affect still
 
-        storage.save_tasks([task])
+        storage._tasks()._write_json([task])
         storage._history()._write_json([event])
 
         storage = JsonStorage(json_tmp_uri)  # forces reinitialization
-        events = storage.load_history()
+        events = storage.load_states_history()
 
         assert(len(events) == 3)
         assert(events[1].next_state == TaskStatus.skipped)

@@ -1,5 +1,6 @@
 
 import contextlib
+import copy
 import threading
 import typing
 import uuid
@@ -8,41 +9,9 @@ from pyknic.lib.uri import URI
 
 from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, ToDoStorageSettings
 
-from pyknic_todo.storage.plain import TaskStorageUpdaterContextProto, PlainTaskStorageProto
+from pyknic_todo.storage.plain import PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
 from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto
-
-from pyknic_todo.storage.helpers import exact_one_task
-
-
-class InMemoryTaskContext(TaskStorageUpdaterContextProto):
-
-    def __init__(self, task_storage: PlainTaskStorageProto, task: Task):
-        TaskStorageUpdaterContextProto.__init__(self)
-        self.__ts = task_storage
-        self.__task = task
-
-    def __call__(self) -> Task:
-        return self.__task
-
-    def commit(self) -> None:
-        def patch_tasks() -> typing.Generator[Task, None, None]:
-
-            task_patched = False
-
-            for i in self.__ts.load_tasks():
-                if i.id != self.__task.id:
-                    yield i
-                elif not task_patched:
-                    task_patched = True
-                    yield self.__task
-                else:
-                    raise ValueError('!')
-
-            if not task_patched:
-                raise ValueError('!')
-
-        self.__ts.save_tasks(list(patch_tasks()))
 
 
 class InMemoryTaskStorage(PlainTaskStorageProto):
@@ -52,21 +21,10 @@ class InMemoryTaskStorage(PlainTaskStorageProto):
         self.__storage: typing.List[Task] = []
 
     def load_tasks(self) -> typing.List[Task]:
-        return self.__storage.copy()
+        return copy.deepcopy(self.__storage)
 
-    def save_tasks(self, tasks: typing.List[Task]) -> None:
-        self.__storage = tasks.copy()
-
-    def append_task(self, task: Task) -> None:
-        self.__storage.append(task)
-
-    def updater_context(
-        self, task_id_query: typing.Union[uuid.UUID, str], query_full_match: bool = True
-    ) -> TaskStorageUpdaterContextProto:
-
-        return InMemoryTaskContext(
-            self, exact_one_task(self.load_tasks(), task_id_query, query_full_match=query_full_match)
-        )
+    def record_task(self, task: Task) -> None:
+        self.__storage.append(task.model_copy(deep=True))
 
 
 class InMemoryRuleStorage(PlainRecurrenceRuleStorageProto):
@@ -76,13 +34,10 @@ class InMemoryRuleStorage(PlainRecurrenceRuleStorageProto):
         self.__storage: typing.List[RecurrenceRule] = []
 
     def load_recurrence_rules(self) -> typing.List[RecurrenceRule]:
-        return self.__storage.copy()
+        return copy.deepcopy(self.__storage)
 
-    def save_recurrence_rules(self, rules: typing.List[RecurrenceRule]) -> None:
-        self.__storage = rules.copy()
-
-    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
-        self.__storage.append(rule)
+    def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
+        self.__storage.append(rule.model_copy(deep=True))
 
 
 class InMemoryHistoryStorage(PlainStateHistoryStorageProto):
@@ -91,11 +46,11 @@ class InMemoryHistoryStorage(PlainStateHistoryStorageProto):
         PlainStateHistoryStorageProto.__init__(self)
         self.__storage: typing.List[StateUpdatedEvent] = []
 
-    def load_history(self) -> typing.List[StateUpdatedEvent]:
-        return self.__storage.copy()
+    def load_states_history(self) -> typing.List[StateUpdatedEvent]:
+        return copy.deepcopy(self.__storage)
 
     def record_history_event(self, event: StateUpdatedEvent) -> None:
-        self.__storage.append(event)
+        self.__storage.append(event.model_copy(deep=True))
 
 
 class InMemorySettingsStorage(PlainSettingsStorageProto):

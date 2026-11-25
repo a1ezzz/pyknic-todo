@@ -91,3 +91,31 @@ class ToDoTaskSelectorCommandModel(pydantic.BaseModel):
         description='Filter tasks an include only those that has been changed in the last N days',
         validation_alias=pydantic.AliasChoices('max-age')
     )
+
+
+class ToDoUpsertCommandModel(pydantic.BaseModel):
+    """Add a new task to the storage."""
+
+    title: str = pydantic.Field(
+        description='Title or summary of the task.',
+        validation_alias=pydantic.AliasChoices('t', 'title'),
+    )
+    project: typing.Optional[str] = pydantic.Field(
+        default=None,
+        description='Optional project name for grouping related tasks.',
+    )
+    description: str = pydantic.Field(
+        default='',
+        description='Detailed description of the task.',
+    )
+    priority: TaskPriority = pydantic.Field(
+        default=TaskPriority.medium,
+        description='Priority level of the task (low, medium, high, urgent).',
+        validation_alias=pydantic.AliasChoices('p', 'priority'),
+    )
+    tags: typing.List[str] = pydantic.Field(
+        default_factory=list,
+        description='List of tags or labels categorizing the task.',
+    )
+
+    # due_date:  # TODO: uncomment and process it

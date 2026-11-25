@@ -23,7 +23,6 @@
 
 import abc
 import datetime
-import types
 import typing
 import uuid
 
@@ -36,35 +35,7 @@ from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateUpdatedEve
 from pyknic_todo.models import RecurrenceScheduleType
 
 from .proto import ToDoStorageProto
-from .helpers import partial_uuid_select
-
-
-class TaskStorageUpdaterContextProto(metaclass=abc.ABCMeta):
-    """This abstract class helps to update a single task and helps to hide implementation routine. """
-
-    def __enter__(self) -> typing.Self:
-        """Enter this context."""
-
-        return self
-
-    def __exit__(
-        self,
-        exc_type: typing.Optional[typing.Type[BaseException]],
-        exc_val: typing.Optional[BaseException],
-        exc_tb: typing.Optional[types.TracebackType]
-    ) -> None:
-        """Exit this context."""
-        pass
-
-    @abc.abstractmethod
-    def __call__(self) -> Task:
-        """Return a task this updater is changing."""
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
-    def commit(self) -> None:
-        """Save changes for a single task. (May be called multiple times)"""
-        raise NotImplementedError('This method is abstract')
+from .helpers import partial_uuid_select, exact_one_task
 
 
 class PlainTaskStorageProto(metaclass=abc.ABCMeta):
@@ -75,32 +46,8 @@ class PlainTaskStorageProto(metaclass=abc.ABCMeta):
         """Load all tasks."""
         raise NotImplementedError('This method is abstract')
 
-    @abc.abstractmethod
-    def save_tasks(self, tasks: list[Task]) -> None:
-        """Replace tasks and save them.
-
-        :param tasks: a new set of tasks (previous tasks will be discared)
-        """
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
-    def updater_context(
-        self, task_id_query: typing.Union[uuid.UUID, str], query_full_match: bool = True
-    ) -> TaskStorageUpdaterContextProto:
-        """Return a context that helps to update a single task that was found by the specified criteria
-
-        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
-        :param query_full_match: whether a task_id_query is a full identifier or a partial match may be used (work only
-        if a task_id_query is str-object)
-        """
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
-    def append_task(self, task: Task) -> None:
-        """Append a new task in a storage.
-
-        :param task: a new task to add
-        """
+    def record_task(self, task: Task) -> None:
+        """Save a change (a new or updated task)"""
         raise NotImplementedError('This method is abstract')
 
 
@@ -113,16 +60,8 @@ class PlainRecurrenceRuleStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
-    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        """Replace recurrence rules and save them.
-
-        :param rules: a new set of rules (previous rules will be discared)
-        """
-        raise NotImplementedError('This method is abstract')
-
-    @abc.abstractmethod
-    def append_recurrence_rule(self, rule: RecurrenceRule) -> None:
-        """Persist a new recurrence rule.
+    def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
+        """Persist a recurrence rule.
 
         :param rule: a new rule to add
         """
@@ -133,7 +72,7 @@ class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for state history storage backends."""
 
     @abc.abstractmethod
-    def load_history(self) -> list[StateUpdatedEvent]:
+    def load_states_history(self) -> list[StateUpdatedEvent]:
         """Load all history events."""
         raise NotImplementedError('This method is abstract')
 
@@ -151,18 +90,7 @@ class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
         :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
         """
 
-        return [e for e in self.load_history() if partial_uuid_select(e.task_id, task_id_query)]
-
-    def task_latest_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
-        """Return the latest status for a task
-
-        :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
-        """
-        events = self.find_events_for_task(task_id_query)
-        if events:
-            return (events[-1].next_state)
-
-        raise ValueError(f'Task id "{task_id_query}" was not found')
+        return [e for e in self.load_states_history() if partial_uuid_select(e.task_id, task_id_query)]
 
 
 class PlainSettingsStorageProto(metaclass=abc.ABCMeta):
@@ -204,46 +132,69 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
 
     def load_tasks(self) -> list[Task]:
         """:meth:`.ToDoStorageProto.load_tasks` implementation."""
-        return self._tasks().load_tasks()
 
-    def save_tasks(self, tasks: list[Task]) -> None:
-        """:meth:`.ToDoStorageProto.save_tasks` implementation."""
-        self._tasks().save_tasks(tasks)
+        # TODO: this definitely requires a caching!
+        filtered_tasks: typing.Dict[uuid.UUID, Task] = dict()
+
+        for t in self._tasks().load_tasks():
+            prev_t = filtered_tasks.get(t.id)
+            if not prev_t:
+                filtered_tasks[t.id] = t
+                continue
+            elif prev_t.updated_at <= t.updated_at and prev_t.version < t.version:
+                filtered_tasks[t.id] = t
+                continue
+            elif prev_t.updated_at > t.updated_at and prev_t.version > t.version:
+                continue
+
+            raise RuntimeError('Unsupported state spotted -- "updated_at" and "version" fields mismatch internal logic')
+
+        return list(filtered_tasks.values())
 
     def load_recurrence_rules(self) -> list[RecurrenceRule]:
         """:meth:`.ToDoStorageProto.load_recurrence_rules` implementation."""
         return self._recurrence_rules().load_recurrence_rules()
 
-    def save_recurrence_rules(self, rules: list[RecurrenceRule]) -> None:
-        """:meth:`.ToDoStorageProto.save_recurrence_rules` implementation."""
-        self._recurrence_rules().save_recurrence_rules(rules)
-
-    def load_history(self) -> list[StateUpdatedEvent]:
-        """:meth:`.ToDoStorageProto.load_history` implementation."""
-        return self._history().load_history()
+    def load_states_history(self) -> list[StateUpdatedEvent]:
+        """:meth:`.ToDoStorageProto.load_states_history` implementation."""
+        return self._history().load_states_history()
 
     def record_history_event(self, event: StateUpdatedEvent) -> None:
         """:meth:`.ToDoStorageProto.record_history_event` implementation."""
         self._history().record_history_event(event)
 
-    def append_task(self, task: Task) -> None:
-        """:meth:`.ToDoStorageProto.append_task` implementation."""
+    def record_task(self, task: Task) -> None:
+        """:meth:`.ToDoStorageProto.record_task` implementation."""
 
-        self._tasks().append_task(task)
-
-        self._history().record_history_event(
-            StateUpdatedEvent(
+        if task.state_id is None:
+            state_update = StateUpdatedEvent(
                 task_id=task.id,
                 next_state=TaskStatus.pending,
             )
-        )
+            self._history().record_history_event(state_update)
+            task.state_id = state_update.id
+        else:
+            task.updated_at = todo_models_now()
+            task.version += 1
+
+        self._tasks().record_task(task)
+
+    def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
+        """:meth:`.ToDoStorageProto.record_recurrence_rule` implementation."""
+        self._recurrence_rules().record_recurrence_rule(rule)
 
     def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
         """:meth:`.ToDoStorageProto.task_status` implementation."""
         # TODO: there should be a better way to retreive a status!
 
-        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
-            return self._history().task_latest_status(tc().id)
+        task = exact_one_task(self.load_tasks(), task_id_query, query_full_match=False)
+
+        if task.state_id is not None:
+            for i in self.load_states_history():
+                if i.id == task.state_id:
+                    return i.next_state
+
+        raise RuntimeError(f"The database does not have a state for a task \"{str(task.id)[:8]}\"")
 
     @verify_value(new_status=lambda x: x != TaskStatus.skipped)
     def set_task_status(
@@ -254,37 +205,32 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     ) -> Task:
         """:meth:`.ToDoStorageProto.set_task_status` implementation."""
 
-        if new_status == TaskStatus.skipped:
-            raise ValueError(f'Invalid state to set -- {TaskStatus.skipped}')
+        task = exact_one_task(self.load_tasks(), task_id_query, query_full_match=False)
 
-        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
-            task = tc()
+        if self.task_status(task.id) == TaskStatus.deleted:
+            raise ValueError('Unable to update status of the deleted task')
 
-            if self.task_status(task.id) == TaskStatus.deleted:
-                raise ValueError('Unable to update status of the deleted task')
+        now = todo_models_now()
 
-            now = todo_models_now()
+        if new_status == TaskStatus.deleted:
+            task.deleted_at = now
+        elif new_status == TaskStatus.done:
+            task.completed_at = now
+        elif task.completed_at:
+            task.completed_at = None
 
-            if new_status == TaskStatus.deleted:
-                task.deleted_at = now
-            elif new_status == TaskStatus.done:
-                task.completed_at = now
-            elif task.completed_at:
-                task.completed_at = None
+        state_event = StateUpdatedEvent(
+            task_id=task.id,
+            next_state=TaskStatus(new_status),
+            comment=comment or ""
+        )
 
-            task.updated_at = now
-            task.version += 1
-            tc.commit()
+        self._history().record_history_event(state_event)
 
-            self._history().record_history_event(
-                StateUpdatedEvent(
-                    task_id=task.id,
-                    next_state=TaskStatus(new_status),
-                    comment=comment or ""
-                )
-            )
+        task.state_id = state_event.id
+        self.record_task(task)
 
-            return task
+        return task
 
     def set_task_recurrence(
         self,
@@ -293,20 +239,16 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     ) -> Task:
         """:meth:`.ToDoStorageProto.set_task_recurrence` implementation."""
 
-        with self._tasks().updater_context(task_id_query, query_full_match=False) as tc:
-            task = tc()
+        task = exact_one_task(self.load_tasks(), task_id_query, query_full_match=False)
 
-            if rule:
-                self._recurrence_rules().append_recurrence_rule(rule)
-                task.recurrence_rule_id = rule.id
-            else:
-                task.recurrence_rule_id = None
+        if rule:
+            self._recurrence_rules().record_recurrence_rule(rule)
+            task.recurrence_rule_id = rule.id
+        else:
+            task.recurrence_rule_id = None
 
-            task.version += 1
-            task.updated_at = todo_models_now()
-
-            tc.commit()
-            return task
+        self.record_task(task)
+        return task
 
     def reinitialize_recurrency_states(self) -> None:
         # TODO: mostly for recurrences
@@ -321,7 +263,7 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
         now_dt = todo_models_now()
 
         latest_states: typing.Dict[uuid.UUID, StateUpdatedEvent] = dict()
-        for h in self.load_history():
+        for h in self.load_states_history():
             if h.task_id in current_task_ids:
                 latest_states[h.task_id] = h
 
