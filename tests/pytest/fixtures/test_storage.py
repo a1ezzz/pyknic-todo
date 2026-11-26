@@ -97,6 +97,9 @@ class InMemoryStorage(PlainStorageProto):
     def _settings(self) -> PlainSettingsStorageProto:
         return self.__se
 
+    def purge_data(self, remove_deleted_task: bool, remove_completed_task: bool, reduce_task_history: bool) -> int:
+        raise NotImplementedError('This is not a real implementation')
+
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'PlainStorageProto':
         return cls()

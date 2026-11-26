@@ -49,6 +49,7 @@ from pyknic_todo.subcommands.done_cmd import ToDoDoneCommandModel, done_tasks
 from pyknic_todo.subcommands.history_cmd import ToDoHistoryCommandModel, task_history
 from pyknic_todo.subcommands.list_cmd import ToDoListCommandModel, list_tasks
 from pyknic_todo.subcommands.projects_cmd import ToDoProjectsCommandModel, list_projects
+from pyknic_todo.subcommands.purge_cmd import ToDoPurgeCommandModel, purge_task
 from pyknic_todo.subcommands.repeat_cmd import ToDoRepeatCommandModel, repeat_task
 from pyknic_todo.subcommands.show_cmd import ToDoShowCommandModel, show_task
 from pyknic_todo.subcommands.status_cmd import ToDoStatusCommandModel, tasks_status
@@ -81,6 +82,7 @@ class ToDoCommandModel(pydantic.BaseModel):
     history: pydantic_settings.CliSubCommand[ToDoHistoryCommandModel]
     list: pydantic_settings.CliSubCommand[ToDoListCommandModel]
     projects: pydantic_settings.CliSubCommand[ToDoProjectsCommandModel]
+    purge: pydantic_settings.CliSubCommand[ToDoPurgeCommandModel]
     repeat: pydantic_settings.CliSubCommand[ToDoRepeatCommandModel]
     show: pydantic_settings.CliSubCommand[ToDoShowCommandModel]
     status: pydantic_settings.CliSubCommand[ToDoStatusCommandModel]
@@ -132,6 +134,8 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             caller = await AsyncWrapper.create(functools.partial(list_tasks, self.__storage(), self._args.list))
         elif self._args.projects:
             caller = await AsyncWrapper.create(functools.partial(list_projects, self.__storage(), self._args.projects))
+        elif self._args.purge:
+            caller = await AsyncWrapper.create(functools.partial(purge_task, self.__storage(), self._args.purge))
         elif self._args.repeat:
             caller = await AsyncWrapper.create(functools.partial(repeat_task, self.__storage(), self._args.repeat))
         elif self._args.show:
