@@ -6,7 +6,7 @@ import pytest
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.storage.json import __json_storage_scheme__
+from pyknic_todo.storage.json.implementation import __json_storage_scheme__
 
 
 @pytest.fixture

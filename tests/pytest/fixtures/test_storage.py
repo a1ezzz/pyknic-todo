@@ -12,6 +12,7 @@ from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, ToDoStor
 from pyknic_todo.storage.plain import PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
 from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto
+from pyknic_todo.version import __version__
 
 
 class InMemoryTaskStorage(PlainTaskStorageProto):
@@ -57,7 +58,7 @@ class InMemorySettingsStorage(PlainSettingsStorageProto):
 
     def __int__(self) -> None:
         PlainSettingsStorageProto.__init__(self)
-        self.__settings = ToDoStorageSettings(comment='InMemory storage')
+        self.__settings = ToDoStorageSettings(comment='InMemory storage', scheme_version=__version__)
 
     def storage_id(self) -> uuid.UUID:
         return self.__settings.id
@@ -99,3 +100,11 @@ class InMemoryStorage(PlainStorageProto):
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'PlainStorageProto':
         return cls()
+
+    @classmethod
+    def update_scheme(cls, scheme_uri: URI) -> str:
+        raise NotImplementedError('This is not a real implementation')
+
+    @classmethod
+    def latest_migration(cls) -> str:
+        raise NotImplementedError('This is not a real implementation')

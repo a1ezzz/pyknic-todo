@@ -79,6 +79,7 @@ class ToDoStorageSettings(pydantic.BaseModel):
 
     id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     comment: str = pydantic.Field(default="")
+    scheme_version: str
 
 
 class RecurrenceRule(pydantic.BaseModel):

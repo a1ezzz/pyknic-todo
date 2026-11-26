@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pyknic_todo/storage/json.py
+# pyknic_todo/storage/json/implementation.py
 #
 # Copyright (C) 2026 the pyknic_todo authors and contributors
 # <see AUTHORS file>
@@ -21,46 +21,35 @@
 
 
 import contextlib
-import enum
 import fcntl
+import json
 import os
 import pathlib
 import threading
 import typing
 import uuid
 
+import packaging.version
 import pydantic
 
+from pyknic.lib.log import Logger
 from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
 from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings
+from pyknic_todo.version import __version__
 
-from .helpers import partial_uuid_select
+from pyknic_todo.storage.helpers import partial_uuid_select
 
-from .plain import PlainTaskStorageProto, PlainStateHistoryStorageProto
-from .plain import PlainRecurrenceRuleStorageProto, PlainStorageProto, PlainSettingsStorageProto
+from pyknic_todo.storage.proto import SchemeMigrationRequiredError, SchemeMigrationCallError
+from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainStateHistoryStorageProto
+from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStorageProto, PlainSettingsStorageProto
 
-from .storage import __storage_registry__
+from pyknic_todo.storage.registry import __storage_registry__
 
-
-@enum.unique
-class JsonFile(enum.Enum):
-    """Possible files that this storage creates."""
-
-    tasks = "tasks.json"                        # file that stores :class:`.Task` objects
-    recurrence_rules = "recurrence_rules.json"  # file that stores :class:`.RecurrenceRule` objects
-    states_history = "states_history.json"      # file that stores :class:`.StateUpdatedEvent` objects
-    settings = "settings.json"                  # file that stores :class:`.ToDoStorageSettings` object
-
-
-@enum.unique
-class JsonFileModels(enum.Enum):
-    """Models that are stored in files."""
-    tasks = Task
-    recurrence_rules = RecurrenceRule
-    states_history = StateUpdatedEvent
-    settings = ToDoStorageSettings
+from .migrations.registry import __json_migrations_registry__
+from .enums import JsonFile, JsonFileModels
+from .helpers import read_jsonl_file
 
 
 class StorageLock:
@@ -141,18 +130,10 @@ class _BaseJsonEntityStorage:
         """ Read, parse and return list of inner objects"""
 
         with self.__lock_manager.lock():
-            with open(self.__file_path, "r", encoding="utf-8") as f:
-
-                result = []
-                line = f.readline()
-
-                while line:
-                    stripped_line = line.strip()
-                    if stripped_line:
-                        result.append(self.__model_cls.model_validate_json(stripped_line))
-                    line = f.readline()
-
-                return result
+            result = []
+            for line in read_jsonl_file(self.__file_path):
+                result.append(self.__model_cls.model_validate_json(line))
+            return result
 
     def __serialize(self, obj: pydantic.BaseModel) -> str:
         """Return a one-line JSON-string that represent a specified object
@@ -342,6 +323,7 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
     def __init__(
         self,
         data_dir: pathlib.Path,
+        expected_version: str,
         lock: StorageLock,
     ) -> None:
         """ Create a new state-history storage
@@ -349,6 +331,7 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
         :param data_dir: absolute path to a directory where a storage file should be created
         :param lock: exclusive I/O lock
         """
+        self.__expected_version = expected_version
 
         PlainSettingsStorageProto.__init__(self)
         _BaseJsonEntityStorage.__init__(
@@ -358,18 +341,62 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
             lock=lock
         )
 
-        self.__settings: ToDoStorageSettings = self._read_single_obj_json()  # type: ignore[assignment]
+        try:
+            self.__settings: ToDoStorageSettings = self._read_single_obj_json()  # type: ignore[assignment]
+        except pydantic.ValidationError as e:
+            # sanity check
+            scheme_version_name = 'scheme_version'
+
+            if scheme_version_name not in ToDoStorageSettings.model_fields:
+                raise RuntimeError('The "scheme_version" field is unkown to the model')
+
+            err = e.errors()[0]
+
+            if err['type'] == 'missing' and scheme_version_name in err['loc']:
+                raise SchemeMigrationRequiredError(
+                    'Looks like a previous version of DB spotted. Please try to update a scheme with the "update-db" '
+                    'command (please, note a backup).'
+                ) from e
+            else:
+                raise
+
+        app_version = packaging.version.Version(__version__)
+        # this removes suffixes like '-dev'
+        app_version = packaging.version.Version(app_version.base_version)
+
+        scheme_version = packaging.version.Version(self.scheme_version())
+        # this removes suffixes like '-dev'
+        scheme_version = packaging.version.Version(scheme_version.base_version)
+
+        if scheme_version > app_version:
+            # TODO: make it with the specific exception
+            raise RuntimeError(
+                "This is an outdated application which version is smaller then scheme's version. "
+                f"Application version -- {app_version}; scheme version -- {scheme_version}."
+            )
+
+        if packaging.version.Version(self.__expected_version) > scheme_version:
+            # TODO: make it with the specific exception
+            raise RuntimeError(
+                'There are migrations for this database. Please try to update a scheme with the "update-db" command '
+                '(please, note a backup).'
+            )
 
     def storage_id(self) -> uuid.UUID:
         """ :meth:`.PlainSettingsStorageProto.storage_id` method implementation
         """
         return self.__settings.id
 
+    def scheme_version(self) -> str:
+        # TODO: comments or to the PlainSettingsStorageProto
+        return self.__settings.scheme_version
+
     def _init_data(self) -> str:
         """ This overriden :meth:`._BaseJsonEntityStorage._init_data` method that returns settings defaults
         """
         default_settings = ToDoStorageSettings(
-            comment="JSON-file storage"
+            comment="JSON-file storage",
+            scheme_version=self.__expected_version
         )
 
         return default_settings.model_dump_json()
@@ -404,8 +431,7 @@ class JsonStorage(PlainStorageProto):
             raise ValueError(f'Storage directory exists and this is not a directory -- {self.__data_dir}')
 
         self.__lock = StorageLock(lock_file=(self.__data_dir / ".lock"))
-
-        self.__se = JsonSettingsStorage(self.__data_dir, lock=self.__lock)
+        self.__se = JsonSettingsStorage(self.__data_dir, self.latest_migration(), lock=self.__lock)
         self.__ts = JsonTaskStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
         self.__rs = JsonRecurrenceRuleStorage(self.__data_dir, lock=self.__lock)
         self.__hs = JsonHistoryStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
@@ -437,3 +463,67 @@ class JsonStorage(PlainStorageProto):
         """ :meth:`.ToDoStorageProto.create_storage` method implementation
         """
         return cls(storage_uri)
+
+    @classmethod
+    def latest_migration(cls) -> str:
+        migrations = [str(x) for x in __json_migrations_registry__.ids()]
+        migrations.sort(key=lambda x: packaging.version.Version(x))
+        return migrations[-1]
+
+    @classmethod
+    def update_scheme(cls, scheme_uri: URI) -> str:
+        """ :meth:`.ToDoStorageProto.update_scheme` method implementation
+        """
+
+        if scheme_uri.path is None:
+            raise ValueError(f'A directory path was not specified with URI -- {scheme_uri}')
+
+        storage_path = pathlib.Path('/') / pathlib.Path(scheme_uri.path)
+
+        current_version = None
+        with (storage_path / JsonFile.settings.value).open() as f:
+            settings_json = json.load(f)
+            if 'scheme_version' in settings_json:
+                current_version = packaging.version.Version(settings_json['scheme_version'])
+                # this removes suffixes like '-dev'
+                current_version = packaging.version.Version(current_version.base_version)
+
+        migrations = [str(x) for x in __json_migrations_registry__.ids()]
+        migrations.sort(key=lambda x: packaging.version.Version(x))
+
+        app_version = packaging.version.Version(__version__)
+        # this removes suffixes like '-dev'
+        app_version = packaging.version.Version(app_version.base_version)
+
+        if current_version is not None and app_version < current_version:
+            # TODO: copy to the main json implementation storage!
+            # TODO: make it with the specific exception
+            raise SchemeMigrationCallError(
+                "This is an outdated application which version is smaller then scheme's version. "
+                f"Application version -- {app_version}; scheme version -- {current_version}."
+            )
+
+        migrations_to_call = []
+
+        for migration_id in migrations:
+
+            next_version = packaging.version.Version(migration_id)
+
+            if current_version is not None and current_version > next_version:
+                continue
+
+            if next_version > app_version:
+                raise SchemeMigrationCallError('There are future migrations that are obviously unsupported')
+
+            migrations_to_call.append(migration_id)
+
+        if not migrations_to_call:
+            raise RuntimeError('There are no migrations to call')
+
+        for migration_id in migrations_to_call:
+            Logger.info(f'Running the "{migration_id}" migration')
+
+            migration_fn = __json_migrations_registry__.get(migration_id)
+            migration_fn(storage_path)
+
+        return migrations_to_call[-1]

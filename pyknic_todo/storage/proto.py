@@ -29,6 +29,18 @@ from pyknic.lib.verify import verify_value
 from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus
 
 
+class SchemeMigrationRequiredError(Exception):
+    """ This exception is raised when a scheme migration is required.
+    """
+    pass
+
+
+class SchemeMigrationCallError(Exception):
+    """ This exception is raised when a scheme migration fails to execute.
+    """
+    pass
+
+
 class ToDoStorageProto(metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
 
@@ -128,5 +140,19 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
 
         :param task_id_query: a task identifier to update (a partial uuid submittion is supported)
         :param rule: a new recurrence rule for a task. If None, then recurrence will be disabled.
+        """
+        raise NotImplementedError('This method is abstract')
+
+    @classmethod
+    @abc.abstractmethod
+    def update_scheme(cls, scheme_uri: URI) -> str:
+        """ Update current scheme and return latest applied version
+        """
+        raise NotImplementedError('This method is abstract')
+
+    @classmethod
+    @abc.abstractmethod
+    def latest_migration(cls) -> str:
+        """ Return lastest migration this application/scheme required
         """
         raise NotImplementedError('This method is abstract')

@@ -1,7 +1,12 @@
 
 import pytest
 
-from pyknic_todo.storage.proto import ToDoStorageProto
+from pyknic_todo.storage.proto import ToDoStorageProto, SchemeMigrationRequiredError, SchemeMigrationCallError
+
+
+def test_exception() -> None:
+    assert(issubclass(SchemeMigrationRequiredError, Exception) is True)
+    assert(issubclass(SchemeMigrationCallError, Exception) is True)
 
 
 def test_abstract() -> None:
@@ -15,6 +20,8 @@ def test_abstract() -> None:
     pytest.raises(NotImplementedError, ToDoStorageProto.record_task, None, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, ToDoStorageProto.task_status, None, None)  # type: ignore[call-overload]
     pytest.raises(NotImplementedError, ToDoStorageProto.storage_id, None)  # type: ignore[call-overload]
+    pytest.raises(NotImplementedError, ToDoStorageProto.latest_migration)
+    pytest.raises(NotImplementedError, ToDoStorageProto.update_scheme, None)  # type: ignore[call-overload]
 
     with pytest.raises(NotImplementedError):
         ToDoStorageProto.set_task_status(None, None, None)  # type: ignore[arg-type]
