@@ -23,19 +23,24 @@
 
 import typing
 
+import pydantic
+
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedbackResult
 
 from pyknic_todo.models import Task
 from pyknic_todo.storage.proto import ToDoStorageProto
 
 from .common import __plugin_version__
-from .general_models import ToDoUpsertCommandModel
+from .general_models import ToDoUpsertGeneralFieldsModel
 
 
-class ToDoAddCommandModel(ToDoUpsertCommandModel):
+class ToDoAddCommandModel(ToDoUpsertGeneralFieldsModel):
     """Add a new task to the storage."""
 
-    pass
+    title: str = pydantic.Field(
+        description='Title or summary of the task.',
+        validation_alias=pydantic.AliasChoices('t', 'title'),
+    )
 
 
 def add_task(storage: ToDoStorageProto, args: typing.Optional[ToDoAddCommandModel]) -> LobbyCommandResult:
