@@ -129,7 +129,7 @@ class Task(pydantic.BaseModel):
     id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     title: str
     project: typing.Optional[str] = None
-    description: typing.Annotated[str, pydantic.StringConstraints(strip_whitespace=True)] = ""
+    description: typing.Annotated[typing.Optional[str], pydantic.StringConstraints(strip_whitespace=True)] = ""
     priority: TaskPriority = pydantic.Field(default=TaskPriority.medium)
     due_date: typing.Optional[datetime.datetime] = None
     tags: list[str] = pydantic.Field(default_factory=list)

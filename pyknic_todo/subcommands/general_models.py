@@ -93,19 +93,15 @@ class ToDoTaskSelectorCommandModel(pydantic.BaseModel):
     )
 
 
-class ToDoUpsertCommandModel(pydantic.BaseModel):
-    """Add a new task to the storage."""
+class ToDoUpsertGeneralFieldsModel(pydantic.BaseModel):
+    """Common fields for add/update commands."""
 
-    title: str = pydantic.Field(
-        description='Title or summary of the task.',
-        validation_alias=pydantic.AliasChoices('t', 'title'),
-    )
     project: typing.Optional[str] = pydantic.Field(
         default=None,
         description='Optional project name for grouping related tasks.',
     )
-    description: str = pydantic.Field(
-        default='',
+    description: typing.Optional[str] = pydantic.Field(
+        default=None,
         description='Detailed description of the task.',
     )
     priority: TaskPriority = pydantic.Field(

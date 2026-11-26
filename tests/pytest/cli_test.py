@@ -405,6 +405,26 @@ class TestCLI:
         task = storage.load_tasks()[0]
         assert(task.title == 'Task 2')
 
+    def test_update_task_wo_title(self, json_tmp_uri: URI) -> None:
+        # There was a problem so check this to not to regress.
+        # Problem:
+        #   - create a task
+        #   - update a task and do not update a title
+        #   - pydantic_core._pydantic_core.ValidationError (fields required -- title)
+
+        storage_arg = f"--storage-uri={str(json_tmp_uri)}"
+        main([storage_arg, "add", "-t", "Task 1"])
+
+        storage = JsonStorage(json_tmp_uri)
+        task = storage.load_tasks()[0]
+        assert(task.title == 'Task 1')
+
+        main([storage_arg, "update", "--task.id", str(task.id)[:8], '--priority', 'high'])
+
+        storage = JsonStorage(json_tmp_uri)
+        task = storage.load_tasks()[0]
+        assert(task.priority == TaskPriority.high)
+
     def test_cli_projects_cmd(self, json_tmp_uri: URI, capsys: 'CaptureFixture[typing.Any]') -> None:
         storage_arg = f"--storage-uri={str(json_tmp_uri)}"
 

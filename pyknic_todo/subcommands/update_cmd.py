@@ -30,14 +30,20 @@ from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedback
 from pyknic_todo.storage.proto import ToDoStorageProto
 
 from .common import __plugin_version__, select_single_task
-from .general_models import ToDoUpsertCommandModel, ToDoSingleTaskSelectModel
+from .general_models import ToDoUpsertGeneralFieldsModel, ToDoSingleTaskSelectModel
 
 
-class ToDoUpdateCommandModel(ToDoUpsertCommandModel):
+class ToDoUpdateCommandModel(ToDoUpsertGeneralFieldsModel):
     """Update a task in the storage."""
 
     task: ToDoSingleTaskSelectModel = pydantic.Field(
         description='Target task selector by ID prefix or title.',
+    )
+
+    title: typing.Optional[str] = pydantic.Field(
+        description='Title or summary of the task.',
+        validation_alias=pydantic.AliasChoices('t', 'title'),
+        default=None,
     )
 
 
@@ -55,19 +61,19 @@ def update_task(storage: ToDoStorageProto, args: typing.Optional[ToDoUpdateComma
 
     task = select_single_task(storage, args.task)
 
-    if args.title:
+    if args.title is not None:
         task.title = args.title
 
-    if args.project:
+    if args.project is not None:
         task.project = args.project
 
-    if args.description:
+    if args.description is not None:
         task.description = args.description
 
-    if args.priority:
+    if args.priority is not None:
         task.priority = args.priority
 
-    if args.tags:
+    if args.tags is not None:
         task.tags = args.tags
 
     storage.record_task(task)
