@@ -107,7 +107,7 @@ class JSONLMigrationHelper:
         if self.__file_path is not None:
             with self.__file_path.open('w') as f:
                 for i in self.__entries:
-                    f.write(json.dumps(i))
+                    f.write(json.dumps(i, ensure_ascii=False))
                     f.write('\n')
 
 
@@ -192,4 +192,4 @@ def migrate_to_v0_0_10(storage_path: pathlib.Path) -> None:
 
     with (storage_path / JsonFile.settings.value).open('w') as f:
         settings_data['scheme_version'] = '0.0.10'
-        json.dump(settings_data, f)
+        json.dump(settings_data, f, ensure_ascii=False)
