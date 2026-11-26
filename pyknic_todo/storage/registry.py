@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pyknic_todo/storage/storage.py
+# pyknic_todo/storage/registry.py
 #
 # Copyright (C) 2026 the pyknic_todo authors and contributors
 # <see AUTHORS file>

@@ -47,7 +47,7 @@ def update_task(storage: ToDoStorageProto, args: typing.Optional[ToDoUpdateComma
     :param storage: A storage to update a task from
     :param args: a new task settings
 
-    :return: Feedback result indicating task creation.
+    :return: Feedback result indicating task update.
     """
 
     if args is None:

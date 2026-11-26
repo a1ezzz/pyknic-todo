@@ -36,11 +36,11 @@ from pyknic.lib.bellboy.app import register_bellboy_command, BellBoyCommandHandl
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult
 from pyknic.lib.io.aio_wrapper import AsyncWrapper
 
-from pyknic_todo.storage.storage import storage_factory
+from pyknic_todo.storage.registry import storage_factory
 from pyknic_todo.storage.proto import ToDoStorageProto
 from pyknic_todo.path import root_path
 
-import pyknic_todo.storage.json  # noqa: F401, E402  # forces json-storage
+import pyknic_todo.storage.json.implementation  # noqa: F401, E402  # forces json-storage
 
 # TODO: make it through a APIRegistry
 from pyknic_todo.subcommands.add_cmd import ToDoAddCommandModel, add_task
@@ -53,6 +53,7 @@ from pyknic_todo.subcommands.repeat_cmd import ToDoRepeatCommandModel, repeat_ta
 from pyknic_todo.subcommands.show_cmd import ToDoShowCommandModel, show_task
 from pyknic_todo.subcommands.status_cmd import ToDoStatusCommandModel, tasks_status
 from pyknic_todo.subcommands.update_cmd import ToDoUpdateCommandModel, update_task
+from pyknic_todo.subcommands.update_db_cmd import ToDoUpdateDBCommandModel, update_db
 
 
 def init_plugin() -> None:
@@ -84,6 +85,7 @@ class ToDoCommandModel(pydantic.BaseModel):
     show: pydantic_settings.CliSubCommand[ToDoShowCommandModel]
     status: pydantic_settings.CliSubCommand[ToDoStatusCommandModel]
     update: pydantic_settings.CliSubCommand[ToDoUpdateCommandModel]
+    update_db: pydantic_settings.CliSubCommand[ToDoUpdateDBCommandModel] = pydantic.Field(alias='update-db')
 
 
 class BellBoyToDoCommand(BellBoyCommandHandler):
@@ -138,6 +140,8 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             caller = await AsyncWrapper.create(functools.partial(task_history, self.__storage(), self._args.history))
         elif self._args.update:
             caller = await AsyncWrapper.create(functools.partial(update_task, self.__storage(), self._args.update))
+        elif self._args.update_db:
+            caller = await AsyncWrapper.create(functools.partial(update_db, self.__storage_uri(), self._args.update_db))
 
         if caller is None:
             raise ValueError('Unknown subcommand spotted!')
@@ -164,10 +168,8 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
 
         return config
 
-    def __storage(self) -> ToDoStorageProto:
-        """Initialize and return a storage backend instance from the storage URI argument.
-
-        :return: ToDo storage instance implementing ToDoStorageProto.
+    def __storage_uri(self) -> URI:
+        """Return a storage backend URI from a cli and/or settings.
         """
         if not isinstance(self._args, ToDoCommandModel):
             raise TypeError('Invalid command arguments type')
@@ -179,5 +181,9 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
         if storage_str is None:
             raise ValueError('Storage URI was not set! You should you a cli argument or a configuration file')
 
-        storage_uri = URI.parse(storage_str)
-        return storage_factory(storage_uri)
+        return URI.parse(storage_str)
+
+    def __storage(self) -> ToDoStorageProto:
+        """Initialize and return a storage backend instance from the storage URI argument.
+        """
+        return storage_factory(self.__storage_uri())

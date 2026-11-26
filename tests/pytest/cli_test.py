@@ -18,7 +18,7 @@ from pyknic_todo.bellboy import ToDoCommandModel
 from pyknic_todo.cli import main
 from pyknic_todo.models import TaskPriority, RecurrenceScheduleType, TaskStatus
 
-from pyknic_todo.storage.json import JsonStorage
+from pyknic_todo.storage.json.implementation import JsonStorage
 
 
 class TestCLI:
