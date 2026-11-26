@@ -143,6 +143,21 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError('This method is abstract')
 
+    @abc.abstractmethod
+    def purge_data(
+        self,
+        remove_deleted_task: bool,
+        remove_completed_task: bool,
+        reduce_task_history: bool
+    ) -> int:
+        """ Clean and return a count of removed redundant rows.
+
+        :param remove_deleted_task: whether to remove deleted tasks
+        :param remove_completed_task: whether to remove completed tasks
+        :param reduce_task_history: whether to remove task history
+        """
+        raise NotImplementedError('This method is abstract')
+
     @classmethod
     @abc.abstractmethod
     def update_scheme(cls, scheme_uri: URI) -> str:

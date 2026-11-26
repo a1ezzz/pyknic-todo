@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with pyknic_todo.  If not, see <http://www.gnu.org/licenses/>.
 
+# TODO: check lock usage (like for purge function)
+
 
 import contextlib
 import fcntl
@@ -36,10 +38,11 @@ from pyknic.lib.log import Logger
 from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings
+from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings, TaskStatus
+from pyknic_todo.models import todo_models_now
 from pyknic_todo.version import __version__
 
-from pyknic_todo.storage.helpers import partial_uuid_select
+from pyknic_todo.storage.helpers import partial_uuid_select, exact_one_task, exact_one_recurrency_rule
 
 from pyknic_todo.storage.proto import SchemeMigrationRequiredError, SchemeMigrationCallError
 from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainStateHistoryStorageProto
@@ -239,6 +242,66 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         task.storage_origin = self.__storage_id
         self._append_json(task)
 
+    def purge_data(
+        self,
+        storage: 'JsonStorage',
+        remove_deleted_task: bool,
+        remove_completed_task: bool,
+        reduce_task_history: bool
+    ) -> int:
+
+        dedup_tasks = storage.load_tasks()
+        rrules = storage.load_recurrence_rules()
+
+        tasks_to_remove: typing.List[uuid.UUID] = []
+        tasks_to_keep: typing.List[uuid.UUID] = []
+        now_dt = todo_models_now()
+
+        for task in dedup_tasks:
+            # if task.id in (*tasks_to_remove, *tasks_to_keep):
+            if task.id in tasks_to_remove or task.id in tasks_to_keep:
+                continue
+
+            task_state = storage.task_status(task.id)
+
+            if remove_deleted_task and task_state == TaskStatus.deleted:
+                tasks_to_remove.append(task.id)
+                continue
+
+            if remove_completed_task and task_state in (TaskStatus.cancelled, TaskStatus.done, TaskStatus.skipped):
+                latest_task = exact_one_task(dedup_tasks, task.id, query_full_match=True)
+
+                if latest_task.recurrence_rule_id is None:
+                    tasks_to_remove.append(task.id)
+                    continue
+                else:
+                    rule = exact_one_recurrency_rule(rrules, latest_task.recurrence_rule_id)
+                    if rule.until_date is not None and rule.until_date < now_dt:
+                        tasks_to_remove.append(task.id)
+                        continue
+
+            tasks_to_keep.append(task.id)
+
+        result = 0
+        new_rows = list()
+        read_json: typing.Callable[[], typing.List[Task]] = self._read_json  # for mypy
+        for i in read_json():
+            if i.id not in tasks_to_keep:
+                result += 1
+                continue
+
+            if reduce_task_history:
+                latest_task = exact_one_task(dedup_tasks, i.id, query_full_match=True)
+                if i.version != latest_task.version:
+                    result += 1
+                    continue
+
+            new_rows.append(i)
+
+        self._write_json(new_rows)
+
+        return result
+
 
 class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntityStorage):
     """Storage that saves :class:`.RecurrenceRule` objects"""
@@ -272,6 +335,23 @@ class JsonRecurrenceRuleStorage(PlainRecurrenceRuleStorageProto, _BaseJsonEntity
         """ :meth:`.PlainTaskStorageProto.record_recurrence_rule` method implementation
         """
         self._append_json(rule)
+
+    def purge_data(self, task_storage: JsonTaskStorage) -> int:
+        result = 0
+
+        raw_tasks: typing.List[Task] = task_storage._read_json()
+        known_rules = [x.recurrence_rule_id for x in raw_tasks if x.recurrence_rule_id is not None]
+
+        new_rows = list()
+        read_json: typing.Callable[[], typing.List[RecurrenceRule]] = self._read_json  # for mypy
+        for i in read_json():
+            if i.id in known_rules:
+                new_rows.append(i)
+            else:
+                result += 1
+
+        self._write_json(new_rows)
+        return result
 
 
 class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
@@ -315,6 +395,23 @@ class JsonHistoryStorage(PlainStateHistoryStorageProto, _BaseJsonEntityStorage):
         """
         event.storage_origin = self.__storage_id
         self._append_json(event)
+
+    def purge_data(self, task_storage: JsonTaskStorage) -> int:
+        result = 0
+
+        raw_tasks: typing.List[Task] = task_storage._read_json()
+        known_states = [x.state_id for x in raw_tasks if x.state_id is not None]
+
+        new_rows = list()
+        read_json: typing.Callable[[], typing.List[StateUpdatedEvent]] = self._read_json  # for mypy
+        for i in read_json():
+            if i.id in known_states:
+                new_rows.append(i)
+            else:
+                result += 1
+
+        self._write_json(new_rows)
+        return result
 
 
 class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
@@ -458,6 +555,25 @@ class JsonStorage(PlainStorageProto):
         """
         return self.__se
 
+    def purge_data(
+        self, remove_deleted_task: bool, remove_completed_task: bool, reduce_task_history: bool
+    ) -> int:
+        """ :meth:`.ToDoStorageProto.purge_data` method implementation
+        """
+
+        result = 0
+
+        result += self.__ts.purge_data(
+            self,
+            remove_deleted_task=remove_deleted_task,
+            remove_completed_task=remove_completed_task,
+            reduce_task_history=reduce_task_history
+        )
+        result += self.__rs.purge_data(self.__ts)
+        result += self.__hs.purge_data(self.__ts)
+
+        return result
+
     @classmethod
     def create_storage(cls, storage_uri: URI) -> 'JsonStorage':
         """ :meth:`.ToDoStorageProto.create_storage` method implementation
@@ -466,6 +582,8 @@ class JsonStorage(PlainStorageProto):
 
     @classmethod
     def latest_migration(cls) -> str:
+        """ :meth:`.ToDoStorageProto.latest_migration` method implementation
+        """
         migrations = [str(x) for x in __json_migrations_registry__.ids()]
         migrations.sort(key=lambda x: packaging.version.Version(x))
         return migrations[-1]

@@ -116,6 +116,7 @@ class Task(pydantic.BaseModel):
         due_date: Optional due date / deadline string.
         tags: List of tags or labels categorizing the task.
         recurrence_rule_id: Optional UUID reference to a linked recurrence rule.
+        state_id: Optional UUID reference to a linked state. This will be None for a newly created tasks only.
         version: Optimistic locking version counter for syncronization
         created_at: Initial creation timestamp in UTC.
         updated_at: Last modification timestamp in UTC.

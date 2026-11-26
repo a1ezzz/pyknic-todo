@@ -29,15 +29,15 @@
 import uuid
 import typing
 
-from pyknic_todo.models import Task
+from pyknic_todo.models import Task, RecurrenceRule
 
 
-def partial_uuid_select(entry_id: uuid.UUID, task_id_query: typing.Union[uuid.UUID, str]) -> bool:
-    return str(entry_id).startswith(str(task_id_query))
+def partial_uuid_select(entry_id: uuid.UUID, id_query: typing.Union[uuid.UUID, str]) -> bool:
+    return str(entry_id).startswith(str(id_query))
 
 
-def full_uuid_select(entry_id: uuid.UUID, task_id_query: typing.Union[uuid.UUID, str]) -> bool:
-    return str(entry_id) == str(task_id_query)
+def full_uuid_select(entry_id: uuid.UUID, id_query: typing.Union[uuid.UUID, str]) -> bool:
+    return str(entry_id) == str(id_query)
 
 
 def exact_one_task(
@@ -57,3 +57,18 @@ def exact_one_task(
         return result
 
     raise KeyError(f'The task id {task_id_query} was not found')
+
+
+def exact_one_recurrency_rule(rules: typing.Iterable[RecurrenceRule], id_query: uuid.UUID) -> RecurrenceRule:
+
+    result = None
+    for i in rules:
+        if i.id == id_query:
+            if result is not None:
+                raise ValueError(f'Ambiguous rule id: {id_query}')
+            result = i
+
+    if result is not None:
+        return result
+
+    raise KeyError(f'The rule id {id_query} was not found')
