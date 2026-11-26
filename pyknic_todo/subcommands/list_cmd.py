@@ -57,6 +57,16 @@ class ToDoListCommandModel(ToDoTaskSelectorCommandModel):
         description='Display full UUID instead of the first 8 characters.',
         validation_alias=pydantic.AliasChoices('full-id')
     )
+    show_tags: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Include tags in output',
+        validation_alias=pydantic.AliasChoices('show-tags')
+    )
+    show_repeats: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Include the "repeating" column, that shows whether a task has a repeating rule or not',
+        validation_alias=pydantic.AliasChoices('show-repeats')
+    )
 
 
 def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandModel]) -> LobbyCommandResult:
@@ -135,14 +145,21 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
         for t in tasks:
             tasks_statuses[t.id] = storage.task_status(t.id)
 
+    table_result = {
+        'title': [x.title for x in tasks],
+        'id': [str(x.id) if args.full_id else str(x.id)[:8] for x in tasks],
+        'project': [(x.project or "") for x in tasks],
+        'priority': [x.priority.value for x in tasks],
+        'status': [str(tasks_statuses[x.id].value) for x in tasks],
+    }
+
+    if args.show_tags:
+        table_result['tags'] = ["|".join(x.tags) for x in tasks]
+
+    if args.show_repeats:
+        table_result['repeating'] = [str(x.recurrence_rule_id is not None) for x in tasks]
+
     return LobbyTableFeedbackResult(
         plugin_version=__plugin_version__,
-        table_result={
-            'title': [x.title for x in tasks],
-            'id': [str(x.id) if args.full_id else str(x.id)[:8] for x in tasks],
-            'project': [x.project for x in tasks],
-            'priority': [x.priority.value for x in tasks],
-            'status': [str(tasks_statuses[x.id].value) for x in tasks],
-            'repeating': [x.recurrence_rule_id is not None for x in tasks],
-        }
+        table_result=table_result
     )

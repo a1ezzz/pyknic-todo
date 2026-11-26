@@ -304,10 +304,10 @@ class TestCLI:
             "0 9 * * 1",
         ])
 
-        # Default list: short 8-char IDs, repeating column
+        # Default list: short 8-char IDs
         buf = io.StringIO()
         with patch("sys.stdout", buf):
-            code = main([storage_arg, "--json-mode", "list"])
+            code = main([storage_arg, "--json-mode", "list", "--show-repeats"])
         assert(code == 0)
         data = json.loads(buf.getvalue())
         tbl = data["table_result"]
@@ -321,17 +321,17 @@ class TestCLI:
             for i in range(len(tbl["title"]))
         }
         assert(items["Repeating Task"][0] == str(t_repeat.id)[:8])
-        assert(items["Repeating Task"][1] is True)
+        assert(items["Repeating Task"][1] == 'True')
         assert(len(items["Repeating Task"][0]) == 8)
 
         assert(items["One-off Task"][0] == str(t_oneoff.id)[:8])
-        assert(items["One-off Task"][1] is False)
+        assert(items["One-off Task"][1] == 'False')
         assert(len(items["One-off Task"][0]) == 8)
 
         # List with --full-id
         buf_full = io.StringIO()
         with patch("sys.stdout", buf_full):
-            code = main([storage_arg, "--json-mode", "list", "--full-id"])
+            code = main([storage_arg, "--json-mode", "list", "--full-id", "--show-repeats"])
         assert(code == 0)
         data_full = json.loads(buf_full.getvalue())
         tbl_full = data_full["table_result"]
@@ -341,11 +341,11 @@ class TestCLI:
             for i in range(len(tbl_full["title"]))
         }
         assert(items_full["Repeating Task"][0] == str(t_repeat.id))
-        assert(items_full["Repeating Task"][1] is True)
+        assert(items_full["Repeating Task"][1] == 'True')
         assert(len(items_full["Repeating Task"][0]) == 36)
 
         assert(items_full["One-off Task"][0] == str(t_oneoff.id))
-        assert(items_full["One-off Task"][1] is False)
+        assert(items_full["One-off Task"][1] == 'False')
         assert(len(items_full["One-off Task"][0]) == 36)
 
         # Table output check (non-json mode)
