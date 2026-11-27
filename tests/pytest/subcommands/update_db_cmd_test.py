@@ -13,15 +13,23 @@ from pyknic_todo.storage.json.implementation import __json_storage_scheme__
 from pyknic_todo.storage.proto import SchemeMigrationRequiredError
 
 
-__unversioned_json_storage__ = pathlib.Path(__file__).parent / 'test-data-set' / 'unversioned'
-
-
-def test_unupgraded_db() -> None:
+@pytest.mark.parametrize(
+    "db_path",
+    [
+        pathlib.Path(__file__).parent / 'test-data-set' / 'unversioned',
+        pathlib.Path(__file__).parent / 'test-data-set' / '0.0.10',
+    ],
+    ids=(
+        'unversioned',
+        '0.0.10'
+    )
+)
+def test_upgrad_db(db_path: pathlib.Path) -> None:
 
     with tempfile.TemporaryDirectory(prefix='pytest-pyknic_todo', suffix='json_tmp_uri_fixture') as tmp_dir:
 
         tmp_path = pathlib.Path(tmp_dir)
-        shutil.copytree(__unversioned_json_storage__, tmp_path / 'db')
+        shutil.copytree(db_path, tmp_path / 'db')
         json_tmp_uri = URI.parse(f'{__json_storage_scheme__}:///{tmp_dir}/db')
 
         with pytest.raises(SchemeMigrationRequiredError):

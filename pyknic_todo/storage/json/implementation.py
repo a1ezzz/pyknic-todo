@@ -476,7 +476,7 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
 
         if packaging.version.Version(self.__expected_version) > scheme_version:
             # TODO: make it with the specific exception
-            raise RuntimeError(
+            raise SchemeMigrationRequiredError(
                 'There are migrations for this database. Please try to update a scheme with the "update-db" command '
                 '(please, note a backup).'
             )
@@ -726,7 +726,7 @@ class JsonStorage(PlainStorageProto):
 
             next_version = packaging.version.Version(migration_id)
 
-            if current_version is not None and current_version > next_version:
+            if current_version is not None and current_version >= next_version:
                 continue
 
             if next_version > app_version:
