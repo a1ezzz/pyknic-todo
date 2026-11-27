@@ -52,8 +52,14 @@ class ToDoPurgeCommandModel(pydantic.BaseModel):
 
     reduce_history: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
         default=False,
-        description='Whether to reduce task history',
+        description='Whether to reduce history',
         validation_alias=pydantic.AliasChoices('reduce-history')
+    )
+
+    remove_empty_projects: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
+        default=False,
+        description='Whether to remove projects without tasks',
+        validation_alias=pydantic.AliasChoices('remove-empty-projects')
     )
 
 
@@ -70,7 +76,8 @@ def purge_task(storage: ToDoStorageProto, args: typing.Optional[ToDoPurgeCommand
     removed_rows = storage.purge_data(
         remove_deleted_task=args.remove_deleted,
         remove_completed_task=args.remove_completed,
-        reduce_task_history=args.reduce_history
+        reduce_history=args.reduce_history,
+        remove_empty_projects=args.remove_empty_projects
     )
 
     return LobbyStrFeedbackResult(

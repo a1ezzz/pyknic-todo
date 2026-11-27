@@ -7,11 +7,11 @@ import uuid
 
 from pyknic.lib.uri import URI
 
-from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, ToDoStorageSettings
+from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, ToDoStorageSettings, Project
 
 from pyknic_todo.storage.plain import PlainTaskStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStateHistoryStorageProto
-from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto
+from pyknic_todo.storage.plain import PlainStorageProto, PlainSettingsStorageProto, PlainProjectStorageProto
 from pyknic_todo.version import __version__
 
 
@@ -26,6 +26,19 @@ class InMemoryTaskStorage(PlainTaskStorageProto):
 
     def record_task(self, task: Task) -> None:
         self.__storage.append(task.model_copy(deep=True))
+
+
+class InMemoryProjectStorage(PlainProjectStorageProto):
+
+    def __init__(self) -> None:
+        PlainProjectStorageProto.__init__(self)
+        self.__storage: typing.List[Project] = []
+
+    def load_projects(self) -> typing.List[Project]:
+        return copy.deepcopy(self.__storage)
+
+    def record_project(self, project: Project) -> None:
+        self.__storage.append(project.model_copy(deep=True))
 
 
 class InMemoryRuleStorage(PlainRecurrenceRuleStorageProto):
@@ -71,6 +84,7 @@ class InMemoryStorage(PlainStorageProto):
         self.__lock = threading.Lock()
 
         self.__ts = InMemoryTaskStorage()
+        self.__ps = InMemoryProjectStorage()
         self.__rs = InMemoryRuleStorage()
         self.__hs = InMemoryHistoryStorage()
         self.__se = InMemorySettingsStorage()
@@ -97,7 +111,12 @@ class InMemoryStorage(PlainStorageProto):
     def _settings(self) -> PlainSettingsStorageProto:
         return self.__se
 
-    def purge_data(self, remove_deleted_task: bool, remove_completed_task: bool, reduce_task_history: bool) -> int:
+    def _project(self) -> PlainProjectStorageProto:
+        return self.__ps
+
+    def purge_data(
+        self, remove_deleted_task: bool, remove_completed_task: bool, reduce_history: bool, remove_empty_projects: bool
+    ) -> int:
         raise NotImplementedError('This is not a real implementation')
 
     @classmethod

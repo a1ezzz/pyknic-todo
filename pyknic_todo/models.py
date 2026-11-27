@@ -104,13 +104,34 @@ class RecurrenceRule(pydantic.BaseModel):
     created_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)
 
 
+class Project(pydantic.BaseModel):
+    """Representation of an individual todo project item.
+
+    Attributes:
+        id: Unique identifier of the project (UUID).
+        name: Unique name.
+        description: Detailed project description with Markdown support (whitespace stripped).
+        version: Optimistic locking version counter for syncronization
+        created_at: Initial creation timestamp in UTC.
+        updated_at: Last modification timestamp in UTC.
+        storage_origin: UUID of the storage that created or last modified the task.
+    """
+    id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
+    name: str
+    description: typing.Annotated[typing.Optional[str], pydantic.StringConstraints(strip_whitespace=True)] = ""
+    version: int = pydantic.Field(default=1)
+    created_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)
+    updated_at: datetime.datetime = pydantic.Field(default_factory=todo_models_now)
+    storage_origin: typing.Optional[uuid.UUID] = None
+
+
 class Task(pydantic.BaseModel):
     """Representation of an individual todo task item.
 
     Attributes:
         id: Unique identifier of the task (UUID).
         title: Short summary or title of the task.
-        project: Optional project for grouping related tasks.
+        project_id: Optional UUID reference to a project.
         description: Detailed task description with Markdown support (whitespace stripped).
         priority: Priority level assigned to the task (defaults to medium).
         due_date: Optional due date / deadline string.
@@ -129,7 +150,7 @@ class Task(pydantic.BaseModel):
 
     id: uuid.UUID = pydantic.Field(default_factory=uuid.uuid4)
     title: str
-    project: typing.Optional[str] = None
+    project_id: typing.Optional[uuid.UUID] = None
     description: typing.Annotated[typing.Optional[str], pydantic.StringConstraints(strip_whitespace=True)] = ""
     priority: TaskPriority = pydantic.Field(default=TaskPriority.medium)
     due_date: typing.Optional[datetime.datetime] = None

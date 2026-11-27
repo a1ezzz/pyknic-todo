@@ -22,11 +22,12 @@
 # TODO: tests
 
 import typing
+import uuid
 
 from pyknic_todo.version import __version__
 
 from pyknic_todo.storage.proto import ToDoStorageProto
-from pyknic_todo.models import Task
+from pyknic_todo.models import Task, Project
 
 from .general_models import ToDoTasksListSelectModel, ToDoSingleTaskSelectModel
 
@@ -108,3 +109,35 @@ def select_multiple_tasks(storage: ToDoStorageProto, task_selector: ToDoTasksLis
         raise ValueError(f'Unable to find a matching task for UID\'s: {", ".join(searching_uids)}')
 
     return tasks
+
+
+def select_single_project_by_name(storage: ToDoStorageProto, name: str) -> typing.Optional[Project]:
+    """Find a single project matching the exact given name. None is returned if no project was found
+
+    :param storage: A storage to search
+    :param name: project name to search
+    """
+
+    projects = storage.load_projects()
+
+    for p in projects:
+        if p.name == name:
+            return p
+
+    return None
+
+
+def select_single_project_by_id(storage: ToDoStorageProto, project_id: uuid.UUID) -> Project:
+    """Find a single project matching the exact given name. None is returned if no project was found
+
+    :param storage: A storage to search
+    :param project_id: project ID to search
+    """
+
+    projects = storage.load_projects()
+
+    for p in projects:
+        if p.id == project_id:
+            return p
+
+    raise RuntimeError(f'Database corrupted! Unable to find a project by id {project_id}')

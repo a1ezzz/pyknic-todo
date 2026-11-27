@@ -26,6 +26,7 @@ import json
 import pathlib
 import types
 import typing
+import uuid
 
 from pyknic.lib.registry import APIRegistry, register_api
 
@@ -193,3 +194,48 @@ def migrate_to_v0_0_10(storage_path: pathlib.Path) -> None:
     with (storage_path / JsonFile.settings.value).open('w') as f:
         settings_data['scheme_version'] = '0.0.10'
         json.dump(settings_data, f, ensure_ascii=False)
+
+
+@register_api(__json_migrations_registry__, '0.0.11')
+def migrate_to_v0_0_11(storage_path: pathlib.Path) -> None:
+    """ Migrate from the "0.0.10" version to the "0.0.11"
+
+    :param storage_path: database path
+    """
+
+    with (storage_path / JsonFile.settings.value).open() as f:
+        current_settings = json.load(f)
+        if current_settings['scheme_version'] != '0.0.10':
+            raise RuntimeError(f'Unable to migrate from the "{current_settings['scheme_version']}" version')
+
+    projects: typing.Set[str] = set()
+    with JSONLMigrationHelper(storage_path / JsonFile.tasks.value, write_mode=False) as m:
+
+        for task_json in m.entries():
+            if task_json['project'] is not None:
+                projects.add(task_json['project'])
+
+    inserted_projects: typing.Dict[str, uuid.UUID] = dict()
+    with (storage_path / JsonFile.projects.value).open('w') as f:
+        for p in projects:
+            project_id = uuid.uuid4()
+            f.write(json.dumps(
+                {"id": str(project_id), "name": p, "storage_origin": current_settings['id']},
+                ensure_ascii=False
+            ))
+            f.write('\n')
+
+            inserted_projects[p] = project_id
+
+    with JSONLMigrationHelper(storage_path / JsonFile.tasks.value) as m:
+
+        def task_mutator(task: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
+            project = task.pop('project')
+            task['project_id'] = str(inserted_projects[project]) if project is not None else None
+            return task
+
+        m.mutate(task_mutator)
+
+    with (storage_path / JsonFile.settings.value).open('w') as f:
+        current_settings['scheme_version'] = '0.0.11'
+        json.dump(current_settings, f, ensure_ascii=False)

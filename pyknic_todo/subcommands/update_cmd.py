@@ -28,8 +28,9 @@ import pydantic
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedbackResult
 
 from pyknic_todo.storage.proto import ToDoStorageProto
+from pyknic_todo.models import Project
 
-from .common import __plugin_version__, select_single_task
+from .common import __plugin_version__, select_single_task, select_single_project_by_name
 from .general_models import ToDoUpsertGeneralFieldsModel, ToDoSingleTaskSelectModel
 
 
@@ -61,11 +62,19 @@ def update_task(storage: ToDoStorageProto, args: typing.Optional[ToDoUpdateComma
 
     task = select_single_task(storage, args.task)
 
+    project_id = None
+    if args.project is not None:
+        project = select_single_project_by_name(storage, args.project)
+        if project is None:
+            project = Project(name=args.project)
+            storage.record_project(project)
+        project_id = project.id
+
     if args.title is not None:
         task.title = args.title
 
-    if args.project is not None:
-        task.project = args.project
+    if project_id is not None:
+        task.project_id = project_id
 
     if args.description is not None:
         task.description = args.description

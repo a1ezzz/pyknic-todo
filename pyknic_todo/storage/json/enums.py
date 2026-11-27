@@ -22,7 +22,7 @@
 
 import enum
 
-from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings
+from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings, Project
 
 
 @enum.unique
@@ -30,6 +30,7 @@ class JsonFile(enum.Enum):
     """Possible files that this storage creates."""
 
     tasks = "tasks.json"                        # file that stores :class:`.Task` objects
+    projects = "projects.json"                  # file that stores :class:`.Project` objects
     recurrence_rules = "recurrence_rules.json"  # file that stores :class:`.RecurrenceRule` objects
     states_history = "states_history.json"      # file that stores :class:`.StateUpdatedEvent` objects
     settings = "settings.json"                  # file that stores :class:`.ToDoStorageSettings` object
@@ -39,6 +40,7 @@ class JsonFile(enum.Enum):
 class JsonFileModels(enum.Enum):
     """Models that are stored in files."""
     tasks = Task
+    projects = Project
     recurrence_rules = RecurrenceRule
     states_history = StateUpdatedEvent
     settings = ToDoStorageSettings

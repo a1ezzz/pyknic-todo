@@ -30,10 +30,10 @@ import pydantic_settings
 
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyTableFeedbackResult
 
-from pyknic_todo.models import TaskStatus, todo_models_now
+from pyknic_todo.models import TaskStatus, todo_models_now, Task
 from pyknic_todo.storage.proto import ToDoStorageProto
 
-from .common import __plugin_version__
+from .common import __plugin_version__, select_single_project_by_id
 from .general_models import ToDoTaskSelectorCommandModel
 
 
@@ -50,7 +50,7 @@ class ToDoListCommandModel(ToDoTaskSelectorCommandModel):
     )
     project: typing.Optional[typing.List[str]] = pydantic.Field(
         default=None,
-        description='Filter tasks belonging to one of the specified projects.',
+        description='Filter tasks belonging to one of the specified projects (ids or names).',
     )
     full_id: pydantic_settings.CliImplicitFlag[bool] = pydantic.Field(
         default=False,
@@ -106,8 +106,10 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
             if args.title and t.title != args.title:
                 continue
 
-            if args.project and t.project not in args.project:
-                continue
+            if args.project and t.project_id is not None:
+                project = select_single_project_by_id(storage, t.project_id)
+                if project.name in args.project:
+                    continue
 
             if args.priority and t.priority not in args.priority:
                 continue
@@ -145,10 +147,13 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
         for t in tasks:
             tasks_statuses[t.id] = storage.task_status(t.id)
 
+    def get_project_name(t: Task) -> str:
+        return select_single_project_by_id(storage, t.project_id).name if t.project_id else ''
+
     table_result = {
         'title': [x.title for x in tasks],
         'id': [str(x.id) if args.full_id else str(x.id)[:8] for x in tasks],
-        'project': [(x.project or "") for x in tasks],
+        'project': [get_project_name(x) for x in tasks],
         'priority': [x.priority.value for x in tasks],
         'status': [str(tasks_statuses[x.id].value) for x in tasks],
     }
