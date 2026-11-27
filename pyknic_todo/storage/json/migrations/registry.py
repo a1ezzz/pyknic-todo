@@ -205,8 +205,9 @@ def migrate_to_v0_0_11(storage_path: pathlib.Path) -> None:
 
     with (storage_path / JsonFile.settings.value).open() as f:
         current_settings = json.load(f)
-        if current_settings['scheme_version'] != '0.0.10':
-            raise RuntimeError(f'Unable to migrate from the "{current_settings['scheme_version']}" version')
+        current_version = current_settings['scheme_version']
+        if current_version != '0.0.10':
+            raise RuntimeError(f'Unable to migrate from the "{current_version}" version')
 
     projects: typing.Set[str] = set()
     with JSONLMigrationHelper(storage_path / JsonFile.tasks.value, write_mode=False) as m:
