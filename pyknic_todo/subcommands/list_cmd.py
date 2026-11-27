@@ -108,7 +108,7 @@ def list_tasks(storage: ToDoStorageProto, args: typing.Optional[ToDoListCommandM
 
             if args.project and t.project_id is not None:
                 project = select_single_project_by_id(storage, t.project_id)
-                if project.name in args.project:
+                if project.name not in args.project:
                     continue
 
             if args.priority and t.priority not in args.priority:
