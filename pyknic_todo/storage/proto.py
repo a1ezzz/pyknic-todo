@@ -26,7 +26,7 @@ import uuid
 from pyknic.lib.uri import URI
 from pyknic.lib.verify import verify_value
 
-from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus
+from pyknic_todo.models import Task, RecurrenceRule, StateUpdatedEvent, TaskStatus, Project
 
 
 class SchemeMigrationRequiredError(Exception):
@@ -43,12 +43,6 @@ class SchemeMigrationCallError(Exception):
 
 class ToDoStorageProto(metaclass=abc.ABCMeta):
     """Abstract facade interface coordinating tasks, recurrence rules, and history."""
-
-    # TODO: there should be some clean-up method (but please note synchronization!):
-    #   - deleted tasks removing
-    #   - rules without tasks
-    #   - history events without tasks
-    #   - outdated history events
 
     @classmethod
     @abc.abstractmethod
@@ -81,6 +75,11 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
+    def load_projects(self) -> list[Project]:
+        """Load all projects."""
+        raise NotImplementedError('This method is abstract')
+
+    @abc.abstractmethod
     def record_task(self, task: Task) -> None:
         """Append a new task or update a previous one. A new state ('pending') for the task will be kept in a history
         automatically.
@@ -102,6 +101,13 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         """Append a new recurrence rule.
 
         :param rules: a new rule to append
+        """
+        raise NotImplementedError('This method is abstract')
+
+    def record_project(self, project: Project) -> None:
+        """Append a new project.
+
+        :param project: a new project to append
         """
         raise NotImplementedError('This method is abstract')
 
@@ -148,13 +154,15 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
         self,
         remove_deleted_task: bool,
         remove_completed_task: bool,
-        reduce_task_history: bool
+        reduce_history: bool,
+        remove_empty_projects: bool
     ) -> int:
         """ Clean and return a count of removed redundant rows.
 
         :param remove_deleted_task: whether to remove deleted tasks
         :param remove_completed_task: whether to remove completed tasks
-        :param reduce_task_history: whether to remove task history
+        :param reduce_history: whether to remove change history
+        :param remove_empty_projects: whether to remove projects without tasks
         """
         raise NotImplementedError('This method is abstract')
 

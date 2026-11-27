@@ -27,10 +27,10 @@ import pydantic
 
 from pyknic.lib.fastapi.models.lobby import LobbyCommandResult, LobbyStrFeedbackResult
 
-from pyknic_todo.models import Task
+from pyknic_todo.models import Task, Project
 from pyknic_todo.storage.proto import ToDoStorageProto
 
-from .common import __plugin_version__
+from .common import __plugin_version__, select_single_project_by_name
 from .general_models import ToDoUpsertGeneralFieldsModel
 
 
@@ -55,9 +55,17 @@ def add_task(storage: ToDoStorageProto, args: typing.Optional[ToDoAddCommandMode
     if args is None:
         raise ValueError('Required arguments was not found')
 
+    project_id = None
+    if args.project is not None:
+        project = select_single_project_by_name(storage, args.project)
+        if project is None:
+            project = Project(name=args.project)
+            storage.record_project(project)
+        project_id = project.id
+
     task = Task(
         title=args.title,
-        project=args.project,
+        project_id=project_id,
         description=args.description,
         priority=args.priority,
         tags=args.tags

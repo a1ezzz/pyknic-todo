@@ -29,7 +29,7 @@
 import uuid
 import typing
 
-from pyknic_todo.models import Task, RecurrenceRule
+from pyknic_todo.models import Task, RecurrenceRule, Project
 
 
 def partial_uuid_select(entry_id: uuid.UUID, id_query: typing.Union[uuid.UUID, str]) -> bool:
@@ -66,6 +66,21 @@ def exact_one_recurrency_rule(rules: typing.Iterable[RecurrenceRule], id_query: 
         if i.id == id_query:
             if result is not None:
                 raise ValueError(f'Ambiguous rule id: {id_query}')
+            result = i
+
+    if result is not None:
+        return result
+
+    raise KeyError(f'The rule id {id_query} was not found')
+
+
+def exact_one_project(projects: typing.Iterable[Project], id_query: uuid.UUID) -> Project:
+
+    result = None
+    for i in projects:
+        if i.id == id_query:
+            if result is not None:
+                raise ValueError(f'Ambiguous project id: {id_query}')
             result = i
 
     if result is not None:

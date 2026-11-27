@@ -98,7 +98,7 @@ class ToDoUpsertGeneralFieldsModel(pydantic.BaseModel):
 
     project: typing.Optional[str] = pydantic.Field(
         default=None,
-        description='Optional project name for grouping related tasks.',
+        description='Optional project for grouping related tasks.',
     )
     description: typing.Optional[str] = pydantic.Field(
         default=None,

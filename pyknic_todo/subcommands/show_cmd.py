@@ -32,7 +32,7 @@ from pyknic_todo.storage.proto import ToDoStorageProto
 
 
 from .general_models import ToDoSingleTaskSelectModel
-from .common import select_single_task, __plugin_version__
+from .common import select_single_task, __plugin_version__, select_single_project_by_id
 
 
 class ToDoShowCommandModel(pydantic.BaseModel):
@@ -59,6 +59,7 @@ def show_task(storage: ToDoStorageProto, args: typing.Optional[ToDoShowCommandMo
 
     recurrence_info = None
     if task.recurrence_rule_id:
+        # TODO: to a .common module
         for rule in storage.load_recurrence_rules():
             if rule.id == task.recurrence_rule_id:
                 recurrence_info = f'{rule.schedule_type.value}: {rule.schedule_expression}'
@@ -66,12 +67,17 @@ def show_task(storage: ToDoStorageProto, args: typing.Optional[ToDoShowCommandMo
                     recurrence_info += f' (until {rule.until_date.isoformat()})'
                 break
 
+    project_name = None
+    if task.project_id:
+        project = select_single_project_by_id(storage, task.project_id)
+        project_name = project.name
+
     kv_result: typing.Dict[str, typing.Any] = {
         'id': str(task.id),
         'title': task.title,
         'status': storage.task_status(task.id).value,
         'priority': task.priority.value,
-        'project': task.project,
+        'project': project_name,
         'description': task.description,
         'tags': task.tags,
         'due_date': task.due_date.isoformat() if task.due_date else None,

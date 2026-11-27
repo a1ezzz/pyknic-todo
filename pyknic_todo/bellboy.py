@@ -55,6 +55,7 @@ from pyknic_todo.subcommands.show_cmd import ToDoShowCommandModel, show_task
 from pyknic_todo.subcommands.status_cmd import ToDoStatusCommandModel, tasks_status
 from pyknic_todo.subcommands.update_cmd import ToDoUpdateCommandModel, update_task
 from pyknic_todo.subcommands.update_db_cmd import ToDoUpdateDBCommandModel, update_db
+from pyknic_todo.subcommands.update_project_cmd import ToDoUpdateProjectCommandModel, update_project
 
 
 def init_plugin() -> None:
@@ -88,6 +89,9 @@ class ToDoCommandModel(pydantic.BaseModel):
     status: pydantic_settings.CliSubCommand[ToDoStatusCommandModel]
     update: pydantic_settings.CliSubCommand[ToDoUpdateCommandModel]
     update_db: pydantic_settings.CliSubCommand[ToDoUpdateDBCommandModel] = pydantic.Field(alias='update-db')
+    update_project: pydantic_settings.CliSubCommand[ToDoUpdateProjectCommandModel] = pydantic.Field(
+        alias='update-project'
+    )
 
 
 class BellBoyToDoCommand(BellBoyCommandHandler):
@@ -146,6 +150,10 @@ class BellBoyToDoCommand(BellBoyCommandHandler):
             caller = await AsyncWrapper.create(functools.partial(update_task, self.__storage(), self._args.update))
         elif self._args.update_db:
             caller = await AsyncWrapper.create(functools.partial(update_db, self.__storage_uri(), self._args.update_db))
+        elif self._args.update_project:
+            caller = await AsyncWrapper.create(
+                functools.partial(update_project, self.__storage(), self._args.update_project)
+            )
 
         if caller is None:
             raise ValueError('Unknown subcommand spotted!')

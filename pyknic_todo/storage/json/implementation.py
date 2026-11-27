@@ -39,14 +39,16 @@ from pyknic.lib.registry import register_api
 from pyknic.lib.uri import URI
 
 from pyknic_todo.models import RecurrenceRule, StateUpdatedEvent, Task, ToDoStorageSettings, TaskStatus
-from pyknic_todo.models import todo_models_now
+from pyknic_todo.models import todo_models_now, Project
 from pyknic_todo.version import __version__
 
 from pyknic_todo.storage.helpers import partial_uuid_select, exact_one_task, exact_one_recurrency_rule
+from pyknic_todo.storage.helpers import exact_one_project
 
 from pyknic_todo.storage.proto import SchemeMigrationRequiredError, SchemeMigrationCallError
 from pyknic_todo.storage.plain import PlainTaskStorageProto, PlainStateHistoryStorageProto
 from pyknic_todo.storage.plain import PlainRecurrenceRuleStorageProto, PlainStorageProto, PlainSettingsStorageProto
+from pyknic_todo.storage.plain import PlainProjectStorageProto
 
 from pyknic_todo.storage.registry import __storage_registry__
 
@@ -247,7 +249,7 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
         storage: 'JsonStorage',
         remove_deleted_task: bool,
         remove_completed_task: bool,
-        reduce_task_history: bool
+        reduce_history: bool
     ) -> int:
 
         dedup_tasks = storage.load_tasks()
@@ -290,7 +292,7 @@ class JsonTaskStorage(PlainTaskStorageProto, _BaseJsonEntityStorage):
                 result += 1
                 continue
 
-            if reduce_task_history:
+            if reduce_history:
                 latest_task = exact_one_task(dedup_tasks, i.id, query_full_match=True)
                 if i.version != latest_task.version:
                     result += 1
@@ -499,6 +501,91 @@ class JsonSettingsStorage(PlainSettingsStorageProto, _BaseJsonEntityStorage):
         return default_settings.model_dump_json()
 
 
+class JsonProjectStorage(PlainProjectStorageProto, _BaseJsonEntityStorage):
+
+    def __init__(
+        self,
+        storage_id: uuid.UUID,
+        data_dir: pathlib.Path,
+        lock: StorageLock,
+    ) -> None:
+        """ Create a new project storage
+
+        :param storage_id: idenitifies a storage this substorage is related to
+        :param data_dir: absolute path to a directory where a storage file should be created
+        :param lock: exclusive I/O lock
+        """
+
+        PlainStateHistoryStorageProto.__init__(self)
+        _BaseJsonEntityStorage.__init__(
+            self,
+            data_dir=data_dir,
+            file_type=JsonFile.projects,
+            lock=lock,
+        )
+
+        self.__storage_id = storage_id
+
+    def load_projects(self) -> list[Project]:
+        """ :meth:`.PlainProjectStorageProto.load_projects` method implementation
+        """
+        return self._read_json()
+
+    def record_project(self, project: Project) -> None:
+        """ :meth:`.PlainProjectStorageProto.record_project` method implementation
+        """
+        project.storage_origin = self.__storage_id
+        self._append_json(project)
+
+    def purge_data(
+        self,
+        storage: 'JsonStorage',
+        task_storage: JsonTaskStorage,
+        remove_empty_projects: bool,
+        reduce_history: bool
+    ) -> int:
+
+        if not any((remove_empty_projects, reduce_history)):
+            return 0
+
+        tasks = task_storage.load_tasks()
+        projects = self.load_projects()
+        dedup_projects = storage.load_projects()
+
+        projects_to_remove: typing.List[uuid.UUID] = list()
+        projects_to_keep: typing.List[uuid.UUID] = list()
+        for p in projects:
+
+            if p.id in projects_to_remove or p.id in projects_to_keep:
+                continue
+
+            if remove_empty_projects and not any((x.project_id == p.id for x in tasks)):
+                projects_to_remove.append(p.id)
+                continue
+
+            projects_to_keep.append(p.id)
+
+        result = 0
+
+        new_rows = list()
+        for i in projects:
+            if i.id not in projects_to_keep:
+                result += 1
+                continue
+
+            if reduce_history:
+                latest_project = exact_one_project(dedup_projects, i.id)
+                if i.version != latest_project.version:
+                    result += 1
+                    continue
+
+            new_rows.append(i)
+
+        self._write_json(new_rows)
+
+        return result
+
+
 __json_storage_scheme__ = 'json+file'
 
 
@@ -530,6 +617,7 @@ class JsonStorage(PlainStorageProto):
         self.__lock = StorageLock(lock_file=(self.__data_dir / ".lock"))
         self.__se = JsonSettingsStorage(self.__data_dir, self.latest_migration(), lock=self.__lock)
         self.__ts = JsonTaskStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
+        self.__ps = JsonProjectStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
         self.__rs = JsonRecurrenceRuleStorage(self.__data_dir, lock=self.__lock)
         self.__hs = JsonHistoryStorage(self.__se.storage_id(), self.__data_dir, lock=self.__lock)
 
@@ -555,8 +643,13 @@ class JsonStorage(PlainStorageProto):
         """
         return self.__se
 
+    def _project(self) -> PlainProjectStorageProto:
+        """ :meth:`.PlainStorageProto._project` method implementation
+        """
+        return self.__ps
+
     def purge_data(
-        self, remove_deleted_task: bool, remove_completed_task: bool, reduce_task_history: bool
+        self, remove_deleted_task: bool, remove_completed_task: bool, reduce_history: bool, remove_empty_projects: bool
     ) -> int:
         """ :meth:`.ToDoStorageProto.purge_data` method implementation
         """
@@ -567,7 +660,13 @@ class JsonStorage(PlainStorageProto):
             self,
             remove_deleted_task=remove_deleted_task,
             remove_completed_task=remove_completed_task,
-            reduce_task_history=reduce_task_history
+            reduce_history=reduce_history
+        )
+        result += self.__ps.purge_data(
+            self,
+            self.__ts,
+            remove_empty_projects=remove_empty_projects,
+            reduce_history=reduce_history
         )
         result += self.__rs.purge_data(self.__ts)
         result += self.__hs.purge_data(self.__ts)

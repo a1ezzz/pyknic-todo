@@ -32,7 +32,7 @@ from pyknic.lib.tasks.scheduler.cron_source import CronSchedule
 from pyknic.lib.verify import verify_value
 
 from pyknic_todo.models import Task, TaskStatus, RecurrenceRule, StateUpdatedEvent, todo_models_now
-from pyknic_todo.models import RecurrenceScheduleType
+from pyknic_todo.models import RecurrenceScheduleType, Project
 
 from .proto import ToDoStorageProto
 from .helpers import partial_uuid_select, exact_one_task
@@ -93,6 +93,23 @@ class PlainStateHistoryStorageProto(metaclass=abc.ABCMeta):
         return [e for e in self.load_states_history() if partial_uuid_select(e.task_id, task_id_query)]
 
 
+class PlainProjectStorageProto(metaclass=abc.ABCMeta):
+    """Abstract interface for project storage backends."""
+
+    @abc.abstractmethod
+    def load_projects(self) -> list[Project]:
+        """Load all projects."""
+        raise NotImplementedError('This method is abstract')
+
+    @abc.abstractmethod
+    def record_project(self, project: Project) -> None:
+        """Append a new project.
+
+        :param project: a new project to append
+        """
+        raise NotImplementedError('This method is abstract')
+
+
 class PlainSettingsStorageProto(metaclass=abc.ABCMeta):
     """Abstract interface for state history storage backends."""
 
@@ -124,6 +141,11 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _settings(self) -> PlainSettingsStorageProto:
         """Settings storage component."""
+        raise NotImplementedError('This method is abstract')
+
+    @abc.abstractmethod
+    def _project(self) -> PlainProjectStorageProto:
+        """Project storage component."""
         raise NotImplementedError('This method is abstract')
 
     def storage_id(self) -> uuid.UUID:
@@ -182,6 +204,51 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
     def record_recurrence_rule(self, rule: RecurrenceRule) -> None:
         """:meth:`.ToDoStorageProto.record_recurrence_rule` implementation."""
         self._recurrence_rules().record_recurrence_rule(rule)
+
+    def load_projects(self) -> list[Project]:
+        """:meth:`.ToDoStorageProto.load_projects` implementation."""
+
+        # TODO: this definitely requires a caching!
+        filtered_projects: typing.Dict[uuid.UUID, Project] = dict()
+
+        for p in self._project().load_projects():
+            prev_p = filtered_projects.get(p.id)
+            if not prev_p:
+                filtered_projects[p.id] = p
+                continue
+            elif prev_p.updated_at <= p.updated_at and prev_p.version < p.version:
+                filtered_projects[p.id] = p
+                continue
+            elif prev_p.updated_at > p.updated_at and prev_p.version > p.version:
+                continue
+
+            raise RuntimeError('Unsupported state spotted -- "updated_at" and "version" fields mismatch internal logic')
+
+        result = list(filtered_projects.values())
+
+        names = {x.name for x in result}
+
+        if len(result) != len(names):
+            raise RuntimeError('Unsupported state spotted -- multiple active projects with the same name!')
+
+        return result
+
+    def record_project(self, project: Project) -> None:
+        """:meth:`.ToDoStorageProto.record_project` implementation."""
+
+        projects = self.load_projects()
+        project_found = None
+        for p in projects:
+            if project.name == p.name and project.id != p.id:
+                raise RuntimeError('Unable to add project with non-unique name!')
+            elif project.id == p.id:
+                project_found = p
+
+        if project_found:
+            p.updated_at = todo_models_now()
+            p.version += 1
+
+        self._project().record_project(project)
 
     def task_status(self, task_id_query: typing.Union[uuid.UUID, str]) -> TaskStatus:
         """:meth:`.ToDoStorageProto.task_status` implementation."""
