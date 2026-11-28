@@ -296,7 +296,7 @@ def migrate_to_v0_0_13(storage_path: pathlib.Path) -> None:
             # do not change anything if there was a successfull and clean state update before
             continue
 
-        if latest_task_history['updated_at'] > latest_state_history['create_at']:
+        if latest_task_history['updated_at'] > latest_state_history['created_at']:
             # do not change anything there were changes
             continue
 
@@ -310,13 +310,16 @@ def migrate_to_v0_0_13(storage_path: pathlib.Path) -> None:
         if latest_commit < 0:
             raise RuntimeError('Internal logic error! Please, consider to check and/or submit a github issue!')
 
+        version_increment = 1
         for state_json in state_history_per_task[latest_commit + 1:]:
             new_row = latest_task_history.copy()
             new_row['state_id'] = state_json['id']
-            new_row['version'] += 1
-            new_row['updated_at'] = state_json['create_at']
+            new_row['version'] += version_increment
+            new_row['updated_at'] = state_json['created_at']
 
             new_task_rows.append(new_row)
+
+            version_increment += 1
 
     with (storage_path / JsonFile.tasks.value).open('a') as f:
         f.seek(0, os.SEEK_END)
