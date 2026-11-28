@@ -94,6 +94,9 @@ class ToDoStorageProto(metaclass=abc.ABCMeta):
 
         :param event: a new event to save
         """
+        # TODO: remove from public proto-spec! This is poisonous since may not update
+        #  state_id and update_dt in a task. Use the set_task_status method instead!
+        #
         raise NotImplementedError('This method is abstract')
 
     @abc.abstractmethod
