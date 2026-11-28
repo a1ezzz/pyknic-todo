@@ -166,10 +166,13 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
             elif prev_t.updated_at <= t.updated_at and prev_t.version < t.version:
                 filtered_tasks[t.id] = t
                 continue
-            elif prev_t.updated_at > t.updated_at and prev_t.version > t.version:
+            elif prev_t.updated_at >= t.updated_at and prev_t.version > t.version:
                 continue
 
-            raise RuntimeError('Unsupported state spotted -- "updated_at" and "version" fields mismatch internal logic')
+            raise RuntimeError(
+                'Unsupported state spotted -- "updated_at" and "version" fields mismatch internal logic. '
+                f'The ID of a problematic task is -- {t.id})'
+            )
 
         return list(filtered_tasks.values())
 
