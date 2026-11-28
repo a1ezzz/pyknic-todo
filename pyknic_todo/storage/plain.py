@@ -357,18 +357,27 @@ class PlainStorageProto(ToDoStorageProto, metaclass=abc.ABCMeta):
 
             if next_dt is not None and next_dt < now_dt:
                 if prev_state.next_state in (TaskStatus.pending, TaskStatus.in_progress):
-                    skipped_event = StateUpdatedEvent(
+
+                    # TODO: remove this copy-paste and join with the set_task_status method.
+                    #   As a public contract, there shouldn't be able to set the "skipped" status
+                    #   with the "set_task_status" method
+
+                    state_event = StateUpdatedEvent(
                         task_id=task.id,
                         next_state=TaskStatus.skipped,
                         comment='A task was not completted in time'
                     )
-                    self.record_history_event(skipped_event)
 
-                self.record_history_event(StateUpdatedEvent(
-                    task_id=task.id,
-                    next_state=TaskStatus.pending,
-                    comment=f'The recurrence rule "{str(rule.id)[:8]}" triggered'
-                ))
+                    self.record_history_event(state_event)
+
+                    task.state_id = state_event.id
+                    self.record_task(task)
+
+                self.set_task_status(
+                    task.id,
+                    TaskStatus.pending,
+                    comment='The recurrence rule "{str(rule.id)[:8]}" triggered'
+                )
 
     def _next_cron_statest(
             self, task: Task, rule: RecurrenceRule, previous_state: StateUpdatedEvent

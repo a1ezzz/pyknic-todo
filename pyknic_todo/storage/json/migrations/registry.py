@@ -23,6 +23,7 @@
 
 import datetime
 import json
+import os
 import pathlib
 import types
 import typing
@@ -116,12 +117,13 @@ class JSONLMigrationHelper:
 def migrate_to_v0_0_8(storage_path: pathlib.Path) -> None:
     """ Migrate from unversionized "pre-0.0.8" version to the "0.0.8" (but unversionized still)
 
+    Changes:
+      - There was a bug, that overrwrites storage id with every call.
+        So since we do not support synchronization at this version it is OK
+        to overwrite this
+
     :param storage_path: database path
     """
-
-    # There was a bug, that overrwrites storage id with every call
-    # So since we do not support synchronization at this version it is OK
-    # to overwrite this
 
     with (storage_path / JsonFile.settings.value).open('r') as f:
         settings_data = json.load(f)
@@ -158,6 +160,10 @@ def migrate_to_v0_0_8(storage_path: pathlib.Path) -> None:
 @register_api(__json_migrations_registry__, '0.0.10')
 def migrate_to_v0_0_10(storage_path: pathlib.Path) -> None:
     """ Migrate from unversionized "0.0.8" version to the "0.0.10"
+
+    Changes:
+      - the new field for every task -- "status_id"
+      - the new field for a storage settings -- "scheme_version"
 
     :param storage_path: database path
     """
@@ -200,6 +206,10 @@ def migrate_to_v0_0_10(storage_path: pathlib.Path) -> None:
 def migrate_to_v0_0_11(storage_path: pathlib.Path) -> None:
     """ Migrate from the "0.0.10" version to the "0.0.11"
 
+    Changes:
+      - a new dedicated storage for projects
+      - the field 'project' for every task was replaced by 'project_id'
+
     :param storage_path: database path
     """
 
@@ -239,4 +249,82 @@ def migrate_to_v0_0_11(storage_path: pathlib.Path) -> None:
 
     with (storage_path / JsonFile.settings.value).open('w') as f:
         current_settings['scheme_version'] = '0.0.11'
+        json.dump(current_settings, f, ensure_ascii=False)
+
+
+@register_api(__json_migrations_registry__, '0.0.13')
+def migrate_to_v0_0_13(storage_path: pathlib.Path) -> None:
+    """ Migrate from the "0.0.11" version to the "0.0.13"
+
+    Changes:
+      - There was a bug that corrupts tasks states. A triggered recurrency
+        rule did create a new state, but did not update state_id, version or update_dt for a task
+
+    :param storage_path: database path
+    """
+
+    with (storage_path / JsonFile.settings.value).open() as f:
+        current_settings = json.load(f)
+        current_version = current_settings['scheme_version']
+        if current_version != '0.0.11':
+            raise RuntimeError(f'Unable to migrate from the "{current_version}" version')
+
+    states_history: typing.Dict[uuid.UUID, typing.List[typing.Dict[str, typing.Any]]] = dict()
+    with JSONLMigrationHelper(storage_path / JsonFile.states_history.value, write_mode=False) as m:
+
+        for state_json in m.entries():
+            sh = states_history.get(state_json['task_id'], list())
+            sh.append(state_json)
+            states_history[state_json['task_id']] = sh
+
+    tasks_history: typing.Dict[uuid.UUID, typing.List[typing.Dict[str, typing.Any]]] = dict()
+    with JSONLMigrationHelper(storage_path / JsonFile.tasks.value, write_mode=False) as m:
+
+        for task_json in m.entries():
+            th = tasks_history.get(task_json['id'], list())
+            th.append(task_json)
+            tasks_history[task_json['id']] = th
+
+    new_task_rows = []
+    for task_json in m.entries():
+        state_history_per_task = states_history[task_json['id']]
+
+        latest_task_history = tasks_history[task_json['id']][-1]
+        latest_state_history = state_history_per_task[-1]
+
+        if latest_task_history['state_id'] == latest_state_history['id']:
+            # do not change anything if there was a successfull and clean state update before
+            continue
+
+        if latest_task_history['updated_at'] > latest_state_history['create_at']:
+            # do not change anything there were changes
+            continue
+
+        # we should find the latest commited changes
+        latest_commit = -1
+        for i, state_json in enumerate(states_history[task_json['id']]):
+            if state_json['id'] == latest_task_history['state_id']:
+                latest_commit = i
+                break
+
+        if latest_commit < 0:
+            raise RuntimeError('Internal logic error! Please, consider to check and/or submit a github issue!')
+
+        for state_json in state_history_per_task[latest_commit + 1:]:
+            new_row = latest_task_history.copy()
+            new_row['state_id'] = state_json['id']
+            new_row['version'] += 1
+            new_row['updated_at'] = state_json['create_at']
+
+            new_task_rows.append(new_row)
+
+    with (storage_path / JsonFile.tasks.value).open('a') as f:
+        f.seek(0, os.SEEK_END)
+
+        for r in new_task_rows:
+            f.write(json.dumps(r, ensure_ascii=False))
+            f.write('\n')
+
+    with (storage_path / JsonFile.settings.value).open('w') as f:
+        current_settings['scheme_version'] = '0.0.13'
         json.dump(current_settings, f, ensure_ascii=False)
